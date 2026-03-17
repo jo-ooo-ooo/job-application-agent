@@ -1,0 +1,12 @@
+.env
+cvs/
+cv/
+output/
+logs/
+eval_results/
+eval_jobs/
+checkpoints/
+.claude/
+__pycache__/
+*.pyc
+.DS_Store
