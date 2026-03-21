@@ -28,9 +28,6 @@ from scoring import (
 )
 from prompts import (
     SYSTEM_PROMPT,
-    STEP_COMPANY_RESEARCH,
-    STEP_HIRING_MANAGER,
-    STEP_HIRING_MANAGER_SKIP,
     STEP_GAP_ANALYSIS,
     STEP_GAP_UPDATE,
     STEP_GAP_REASSESSMENT,
@@ -39,11 +36,11 @@ from prompts import (
     STEP_COVER_LETTER,
     STEP_REVISION,
     STEP_PDF_GENERATION,
-    STEP_GUARDRAIL_FIX_CV,
-    STEP_GUARDRAIL_FIX_CL,
 )
+from agents import run_parallel_research, run_critic_loop
 from tools import PROJECT_DIR
 from pdf_generator import generate_pdf_from_markdown
+from mcp_client import SheetsClient
 from guardrails import (
     validate_cv,
     validate_cover_letter,
@@ -58,7 +55,6 @@ load_dotenv()
 def main():
     parser = argparse.ArgumentParser(description="AI-powered job application agent")
     parser.add_argument("--job", type=str, help="Job description text, file path, or URL")
-    parser.add_argument("--manager", type=str, default="", help="Hiring manager name (optional)")
     parser.add_argument("--resume", type=str, nargs="?", const="latest", help="Resume from checkpoint (run ID, or 'latest')")
     args = parser.parse_args()
 
@@ -103,7 +99,6 @@ def main():
     # ── Load job description ──────────────────────────────────
     if checkpoint:
         job_desc = checkpoint["state"]["job_description"]
-        manager_name = checkpoint["state"].get("manager_name", "")
     else:
         if not args.job:
             print("Usage: python3 main.py --job 'job description text'")
@@ -115,7 +110,6 @@ def main():
             job_desc = _fetch_job_from_url(job_desc)
         elif os.path.isfile(job_desc):
             job_desc = Path(job_desc).read_text(encoding="utf-8")
-        manager_name = args.manager
 
     # Verify required files
     master_list_path = PROJECT_DIR / "cvs" / "projects_master_list.md"
@@ -138,15 +132,22 @@ def main():
     client = anthropic.Anthropic(api_key=api_key)
     logger = RunLogger()
 
+    # ── MCP: Google Sheets (optional — graceful fallback if unavailable) ──
+    sheets = SheetsClient()
+    sheets.health_check()
+
     # ── Structured state ──────────────────────────────────────
     if checkpoint:
         state = checkpoint["state"]
+        # Backward compatibility: old checkpoints may have manager fields
+        state.pop("manager_name", None)
+        state.pop("manager_research", None)
+        state.setdefault("role_analysis", "")
     else:
         state = {
             "job_description": job_desc,
-            "manager_name": manager_name,
             "company_research": "",
-            "manager_research": "",
+            "role_analysis": "",
             "gap_analysis": "",
             "project_selection": "",
             "cv_markdown": "",
@@ -159,40 +160,23 @@ def main():
         print(f"  (resumed from checkpoint {run_id})")
     print("=" * 60)
 
-    # ── Step 1: Company Research ──────────────────────────────
-    if "company_research" not in completed_steps:
-        print("\n[Step 1/7] Researching company and role...")
-        metrics = logger.start_step("company_research")
-        state["company_research"] = run_step(
-            client, SYSTEM_PROMPT,
-            STEP_COMPANY_RESEARCH.format(job_description=state["job_description"]),
-            metrics=metrics, step_name="company_research",
-        )
-        logger.finish_step()
-        completed_steps.append("company_research")
-        save_checkpoint(run_id, state, completed_steps, completed_gates)
-    else:
-        print("\n[Step 1/7] Company research — skipped (cached)")
-    print(state["company_research"])
+    # Backward compat: treat old step names as equivalent to "research"
+    if "company_research" in completed_steps and "hiring_manager" in completed_steps:
+        if "research" not in completed_steps:
+            completed_steps.append("research")
 
-    # ── Step 2: Hiring Manager Research ───────────────────────
-    if "hiring_manager" not in completed_steps:
-        print("\n[Step 2/7] Researching hiring manager...")
-        if state["manager_name"]:
-            metrics = logger.start_step("hiring_manager")
-            state["manager_research"] = run_step(
-                client, SYSTEM_PROMPT,
-                STEP_HIRING_MANAGER.format(manager_name=state["manager_name"]),
-                metrics=metrics, step_name="hiring_manager",
-            )
-            logger.finish_step()
-        else:
-            state["manager_research"] = "No hiring manager specified — skipping."
-        completed_steps.append("hiring_manager")
+    # ── Step 1: Parallel Research (Company + Role) ───────────
+    if "research" not in completed_steps:
+        print("\n[Step 1/6] Researching company and analyzing role (parallel)...")
+        research = run_parallel_research(client, state["job_description"], logger)
+        state["company_research"] = research["company_research"]
+        state["role_analysis"] = research["role_analysis"]
+        completed_steps.append("research")
         save_checkpoint(run_id, state, completed_steps, completed_gates)
     else:
-        print("\n[Step 2/7] Hiring manager research — skipped (cached)")
-    print(state["manager_research"])
+        print("\n[Step 1/6] Research — skipped (cached)")
+    print(state["company_research"])
+    print(state["role_analysis"])
 
     # ── Step 3: Gap Analysis (with decomposed scoring) ────────
     if "gap_analysis" not in completed_steps:
@@ -230,18 +214,42 @@ def main():
                 recommendation = get_recommendation(score)
                 print(format_score_summary(new_scores, score, recommendation))
 
+        # Store final score in state so Sheets logging always uses the latest
+        state["final_score"] = score
+        state["final_recommendation"] = recommendation
+
         completed_steps.append("gap_analysis")
         save_checkpoint(run_id, state, completed_steps, completed_gates)
     else:
-        print("\n[Step 3/7] Gap analysis — skipped (cached)")
+        print("\n[Step 2/6] Gap analysis — skipped (cached)")
         print(state["gap_analysis"])
         # Re-derive score for the gate display
-        dimension_scores = parse_dimension_scores(state["gap_analysis"])
-        if dimension_scores:
-            score = compute_weighted_score(dimension_scores)
-            recommendation = get_recommendation(score)
-        else:
-            score, recommendation = 50.0, "STRATEGIC APPLY"
+        score = state.get("final_score") or 50.0
+        recommendation = state.get("final_recommendation") or "STRATEGIC APPLY"
+        if not state.get("final_score"):
+            gap_text = state["gap_analysis"]
+            # Prefer scores from the updated section if a reassessment happened
+            if "--- UPDATED ---" in gap_text:
+                updated_text = gap_text.split("--- UPDATED ---")[-1]
+                # Try overall score first (e.g. "Updated Score: 72/100")
+                import re
+                m = re.search(r'(\d+)/100', updated_text)
+                if m:
+                    score = float(m.group(1))
+                    recommendation = get_recommendation(score)
+                else:
+                    dimension_scores = parse_dimension_scores(updated_text)
+                    if dimension_scores:
+                        score = compute_weighted_score(dimension_scores)
+                        recommendation = get_recommendation(score)
+            else:
+                dimension_scores = parse_dimension_scores(gap_text)
+                if dimension_scores:
+                    score = compute_weighted_score(dimension_scores)
+                    recommendation = get_recommendation(score)
+            # Persist so Sheets logging picks it up
+            state["final_score"] = score
+            state["final_recommendation"] = recommendation
 
     # ── STOP Gate 1 ───────────────────────────────────────────
     if "gate_1" not in completed_gates:
@@ -261,7 +269,7 @@ def main():
 
     # ── Step 4: Project Selection ─────────────────────────────
     if "project_selection" not in completed_steps:
-        print("\n[Step 4/7] Selecting best-fit projects...")
+        print("\n[Step 3/6] Selecting best-fit projects...")
         metrics = logger.start_step("project_selection")
         state["project_selection"] = run_step(
             client, SYSTEM_PROMPT,
@@ -276,12 +284,12 @@ def main():
         completed_steps.append("project_selection")
         save_checkpoint(run_id, state, completed_steps, completed_gates)
     else:
-        print("\n[Step 4/7] Project selection — skipped (cached)")
+        print("\n[Step 3/6] Project selection — skipped (cached)")
     print(state["project_selection"])
 
     # ── Step 5: CV Construction ───────────────────────────────
     if "cv_construction" not in completed_steps:
-        print("\n[Step 5/7] Constructing tailored CV...")
+        print("\n[Step 4/6] Constructing tailored CV...")
         metrics = logger.start_step("cv_construction")
         state["cv_markdown"] = run_step(
             client, SYSTEM_PROMPT,
@@ -289,7 +297,6 @@ def main():
                 job_description=state["job_description"],
                 company_research=state["company_research"],
                 project_selection=state["project_selection"],
-                manager_research=state["manager_research"],
             ),
             metrics=metrics, step_name="cv_construction",
         )
@@ -297,12 +304,12 @@ def main():
         completed_steps.append("cv_construction")
         save_checkpoint(run_id, state, completed_steps, completed_gates)
     else:
-        print("\n[Step 5/7] CV construction — skipped (cached)")
+        print("\n[Step 4/6] CV construction — skipped (cached)")
     print(state["cv_markdown"])
 
     # ── Step 6: Cover Letter ──────────────────────────────────
     if "cover_letter" not in completed_steps:
-        print("\n[Step 6/7] Writing cover letter...")
+        print("\n[Step 5/6] Writing cover letter...")
         metrics = logger.start_step("cover_letter")
         state["cover_letter_markdown"] = run_step(
             client, SYSTEM_PROMPT,
@@ -310,7 +317,6 @@ def main():
                 job_description=state["job_description"],
                 company_research=state["company_research"],
                 gap_analysis=state["gap_analysis"],
-                manager_research=state["manager_research"],
             ),
             metrics=metrics, step_name="cover_letter",
         )
@@ -318,13 +324,27 @@ def main():
         completed_steps.append("cover_letter")
         save_checkpoint(run_id, state, completed_steps, completed_gates)
     else:
-        print("\n[Step 6/7] Cover letter — skipped (cached)")
+        print("\n[Step 5/6] Cover letter — skipped (cached)")
     print(state["cover_letter_markdown"])
 
-    # Guardrails: validate and auto-fix CV and cover letter
-    state["cv_markdown"], state["cover_letter_markdown"] = _guardrail_auto_fix(
-        client, state, candidate_name, logger,
+    # ── Critic Review Loop ────────────────────────────────────
+    state["cv_markdown"], state["cover_letter_markdown"], critic_rounds = run_critic_loop(
+        client,
+        job_description=state["job_description"],
+        role_analysis=state["role_analysis"],
+        cv_markdown=state["cv_markdown"],
+        cover_letter_markdown=state["cover_letter_markdown"],
+        logger=logger,
     )
+    print(f"  [critic] Completed in {critic_rounds} round(s)")
+
+    # Run structural guardrails as a final safety net (no auto-fix, just warn)
+    cv_warnings = validate_cv(state["cv_markdown"], candidate_name)
+    cl_warnings = validate_cover_letter(state["cover_letter_markdown"], candidate_name)
+    if cv_warnings:
+        print(format_warnings(cv_warnings, "CV"))
+    if cl_warnings:
+        print(format_warnings(cl_warnings, "Cover Letter"))
 
     # ── STOP Gate 2 ───────────────────────────────────────────
     while True:
@@ -365,8 +385,8 @@ def main():
         else:
             print("Invalid choice. Enter 'a', 'r', or 'q'.")
 
-    # ── Step 7: PDF Generation (no LLM needed) ───────────────
-    print("\n[Step 7/7] Generating PDFs...")
+    # ── Step 6: PDF Generation (no LLM needed) ───────────────
+    print("\n[Step 6/6] Generating PDFs...")
     output_dir = PROJECT_DIR / "output"
     output_dir.mkdir(exist_ok=True)
 
@@ -378,6 +398,11 @@ def main():
 
     cl_pages = generate_pdf_from_markdown(state["cover_letter_markdown"], str(cl_path))
     print(f"  Cover letter saved to {cl_path} ({cl_pages} page{'s' if cl_pages > 1 else ''})")
+
+    # ── Log to Google Sheets via MCP ──────────────────────────
+    final_score = state.get("final_score", 50.0)
+    final_recommendation = state.get("final_recommendation", "STRATEGIC APPLY")
+    sheets.log_application(run_id, state, final_score, final_recommendation)
 
     # ── Run Summary ───────────────────────────────────────────
     logger.print_summary()
@@ -393,13 +418,14 @@ def _run_gap_analysis(client, state, logger):
 
     Returns (score, recommendation) tuple.
     """
-    print("\n[Step 3/7] Analyzing fit (hiring manager perspective)...")
+    print("\n[Step 2/6] Analyzing fit (hiring manager perspective)...")
     metrics = logger.start_step("gap_analysis")
     state["gap_analysis"] = run_step(
         client, SYSTEM_PROMPT,
         STEP_GAP_ANALYSIS.format(
             job_description=state["job_description"],
             company_research=state["company_research"],
+            role_analysis=state["role_analysis"],
         ),
         metrics=metrics, step_name="gap_analysis",
     )
@@ -425,6 +451,7 @@ def _run_gap_analysis(client, state, logger):
             STEP_GAP_ANALYSIS.format(
                 job_description=state["job_description"],
                 company_research=state["company_research"],
+                role_analysis=state["role_analysis"],
             ),
             metrics=metrics, step_name="gap_analysis",
         )
@@ -441,68 +468,6 @@ def _run_gap_analysis(client, state, logger):
             print("  [borderline] Could not parse second run scores. Keeping first result.")
 
     return score, recommendation
-
-
-# ── Guardrail auto-fix ────────────────────────────────────────
-
-MAX_GUARDRAIL_RETRIES = 2
-
-def _guardrail_auto_fix(client, state, candidate_name, logger):
-    """Validate CV and cover letter. Auto-fix if guardrails fire. Max 2 retries each.
-
-    Returns (cv_markdown, cover_letter_markdown) — either original or fixed.
-    """
-    cv = state["cv_markdown"]
-    cl = state["cover_letter_markdown"]
-
-    # Auto-fix CV
-    for attempt in range(MAX_GUARDRAIL_RETRIES):
-        cv_warnings = validate_cv(cv, candidate_name)
-        if not cv_warnings:
-            break
-        warning_text = format_warnings(cv_warnings, "CV")
-        print(warning_text)
-        print(f"  [auto-fix] Asking the model to fix CV issues (attempt {attempt + 1}/{MAX_GUARDRAIL_RETRIES})...")
-        metrics = logger.start_step(f"guardrail_fix_cv_{attempt + 1}")
-        cv = run_step(
-            client, SYSTEM_PROMPT,
-            STEP_GUARDRAIL_FIX_CV.format(
-                warnings="\n".join(f"- {w}" for w in cv_warnings),
-                cv_markdown=cv,
-            ),
-            metrics=metrics, step_name="revision",
-        )
-        logger.finish_step()
-    else:
-        # Ran out of retries — show remaining warnings
-        cv_warnings = validate_cv(cv, candidate_name)
-        if cv_warnings:
-            print(format_warnings(cv_warnings, "CV (unfixed — review manually)"))
-
-    # Auto-fix cover letter
-    for attempt in range(MAX_GUARDRAIL_RETRIES):
-        cl_warnings = validate_cover_letter(cl, candidate_name)
-        if not cl_warnings:
-            break
-        warning_text = format_warnings(cl_warnings, "Cover Letter")
-        print(warning_text)
-        print(f"  [auto-fix] Asking the model to fix cover letter issues (attempt {attempt + 1}/{MAX_GUARDRAIL_RETRIES})...")
-        metrics = logger.start_step(f"guardrail_fix_cl_{attempt + 1}")
-        cl = run_step(
-            client, SYSTEM_PROMPT,
-            STEP_GUARDRAIL_FIX_CL.format(
-                warnings="\n".join(f"- {w}" for w in cl_warnings),
-                cl_markdown=cl,
-            ),
-            metrics=metrics, step_name="revision",
-        )
-        logger.finish_step()
-    else:
-        cl_warnings = validate_cover_letter(cl, candidate_name)
-        if cl_warnings:
-            print(format_warnings(cl_warnings, "Cover Letter (unfixed — review manually)"))
-
-    return cv, cl
 
 
 # ── Gap question handler ──────────────────────────────────────
