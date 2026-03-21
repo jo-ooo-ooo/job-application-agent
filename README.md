@@ -1,58 +1,74 @@
 # Job Application Agent
 
-An AI agent that takes a job description and produces a tailored CV and cover letter — researching the company, scoring fit, asking clarifying questions, and auto-fixing quality issues before output.
+An AI agent that takes a job description and produces a tailored CV and cover letter. It researches the company, analyzes the role, scores fit, asks clarifying questions, and runs a writer/critic review loop before generating output.
 
-Built to explore how production-grade agent patterns apply to a real personal use case.
+Built to explore how production-grade agent patterns (multi-agent coordination, adversarial review, guardrails, evaluation) apply to a real personal use case.
 
 ---
 
 ## What it does
 
 ```
-Input: job description URL or text
-         ↓
-Step 1: Company & role research (web search)
-Step 2: Hiring manager research (web search)
-Step 3: Gap analysis — scores fit across 5 dimensions, asks questions
-Step 4: Project selection — picks best-fit experience from master list
-Step 5: CV construction — tailored, ATS-optimized markdown CV
-Step 6: Cover letter — specific to company, addresses gaps honestly
-Step 7: PDF generation
-         ↓
-Output: cv.pdf + cover_letter.pdf
+Input: job description (URL, file, or text)
+         |
+Step 1: Company research + Role analysis  [parallel agents]
+Step 2: Gap analysis — scores fit across 5 dimensions, asks questions
+Step 3: Project selection — picks best-fit experience from master list
+Step 4: CV construction — tailored, ATS-optimized markdown
+Step 5: Cover letter — specific to company, addresses gaps honestly
+         |
+     Critic review loop  [writer/critic agents, up to 3 rounds]
+     Guardrail auto-fix  [structural validation + model fix]
+         |
+Step 6: PDF generation
+         |
+Output: cv.pdf + cover_letter.pdf + Google Sheets log
 ```
 
 Two human gates: after gap analysis (proceed?), and after seeing the CV/cover letter (approve, revise, or quit).
 
 ---
 
-## Technical features
+## Architecture
 
-**Reliability**
-- Per-step temperature control (0 for analytical steps, 0.3-0.4 for creative ones)
-- Decomposed scoring — model scores 5 dimensions independently, code computes weighted total (removes anchoring bias)
+### Multi-agent workflow
+
+**Parallel research agents** — Company research and role analysis run concurrently via `ThreadPoolExecutor`. Each agent is fault-isolated: if one fails, the other still returns its result.
+
+**Writer/critic review loop** — After the CV and cover letter are drafted, a critic agent reviews them from a hiring manager's perspective. If not approved, the writer revises based on specific feedback. Loops until approved or max 3 iterations. Returns structured results: approval status, per-round issues, word count deltas.
+
+### Reliability
+
+- Stateless steps — each step gets only the state it needs, no conversation history
+- Per-step temperature control (0 for analytical, 0.3-0.4 for creative)
+- Decomposed scoring — model scores 5 dimensions independently, code computes weighted total
 - Borderline re-run — scores in 45-65 range trigger a second assessment and average
+- Retry with exponential backoff for rate limits, overloaded errors, and connection failures
 
-**Observability**
+### Observability
+
 - Per-step token counts, cost, latency, tool calls, and retry counts
+- Critic loop summary: approval status, issues found per round, revision word count changes
 - Full run logs saved as JSON in `logs/`
+- Google Sheets integration via MCP for application tracking
 
-**Guardrails**
-- Runtime validation on CV (name, word count, headers, contact info, placeholders) and cover letter (length, generic phrases)
-- Auto-fix loop: fires the model again with the specific warnings, up to 2 retries
+### Guardrails
 
-**Evaluation**
-- Three modes: `--logs` (analyze past runs), `--dataset` (full pipeline), `--step` (single step with cached state)
+- Runtime validation on CV (name, word count, headers, contact info, placeholders)
+- Cover letter validation (length, name, generic phrases)
+- Gap analysis validation (scoring dimensions present)
+- Auto-fix: if guardrails fail after critic loop, model is asked to fix specific issues
+
+### Evaluation
+
+- Three modes: `--logs` (analyze past runs), `--dataset` (full pipeline), `--step` (single step)
 - `--model` flag to compare Haiku / Sonnet / Opus on any step
-- LLM-as-judge scoring (Haiku) + automated checks (word count, keyword match, guardrail pass)
-- Outputs saved per run for after-the-fact comparison
+- Automated checks: word count, keyword match, guardrail pass, research completeness, critic effectiveness
+- LLM-as-judge scoring (Haiku): CV relevance, CL specificity, gap accuracy, research quality, role analysis quality
 
-**Checkpointing**
-- State saved to `checkpoints/` after every step
-- `--resume` flag to continue from where a crashed run left off
+### MCP integration
 
-**Testing**
-- 90 unit tests across scoring, question parser, guardrails, path security, and checkpoint logic
+Google Sheets logging via Model Context Protocol (MCP). The MCP server (`sheets_mcp_server.py`) runs as a subprocess with stdio transport. The client (`mcp_client.py`) discovers tools at runtime and calls `append_row` to log each application.
 
 ---
 
@@ -67,10 +83,11 @@ pip install -r requirements.txt
 cp .env.example .env
 # Add ANTHROPIC_API_KEY (required)
 # Add BRAVE_API_KEY (optional — falls back to DuckDuckGo)
+# Add GOOGLE_SHEETS_ID (optional — for application tracking)
 
 # 3. Add your CV files
-cp cvs_examples/template_standard_example.md cvs/template_standard.md
-cp cvs_examples/projects_master_list_example.md cvs/projects_master_list.md
+cp examples/template_standard_example.md cvs/template_standard.md
+cp examples/projects_master_list_example.md cvs/projects_master_list.md
 # Fill in your actual experience
 ```
 
@@ -80,18 +97,24 @@ cp cvs_examples/projects_master_list_example.md cvs/projects_master_list.md
 
 ```bash
 # Run with a job description file
-python3 main.py --job eval_jobs/jd_1.txt
+python3 main.py --job jd.txt
 
 # Run with a URL
 python3 main.py --job https://linkedin.com/jobs/view/...
 
-# Resume a crashed run
+# Run with pasted text
+python3 main.py --job "Senior PM at Acme Corp..."
+
+# Resume a crashed/interrupted run
 python3 main.py --resume
 
 # Evaluate output quality
-python3 eval.py --logs
-python3 eval.py --dataset eval_jobs/
-python3 eval.py --step cv_construction --dataset eval_jobs/ --model haiku
+python3 eval/eval.py --logs
+python3 eval/eval.py --dataset eval/jobs/
+python3 eval/eval.py --step cv_construction --dataset eval/jobs/ --model haiku
+
+# Run tests
+python3 -m pytest tests/ -v
 ```
 
 ---
@@ -99,24 +122,31 @@ python3 eval.py --step cv_construction --dataset eval_jobs/ --model haiku
 ## Project structure
 
 ```
-agent.py           Core agent loop — stateless steps, retry logic, tool execution
-main.py            Orchestration — pipeline, user gates, checkpointing
-prompts.py         All step prompts with {placeholders} for state injection
-scoring.py         Decomposed scoring — parse dimensions, compute weighted total
-guardrails.py      Runtime validation + auto-fix
-run_logger.py      Per-step metrics (tokens, cost, latency, tools, retries)
-checkpoint.py      Save/load pipeline state for resume
-eval.py            Evaluation runner — 3 modes, multi-model, LLM-as-judge
-eval_criteria.py   Scoring criteria — automated checks + LLM-as-judge prompts
-tools.py           Tool definitions (web_search, read_file, generate_pdf)
-pdf_generator.py   Markdown → PDF via fpdf2
+main.py              Orchestration — pipeline, user gates, checkpointing
+agent.py             Core agent loop — stateless steps, retry logic, tool execution
+agents.py            Multi-agent coordination — parallel research, critic loop
+prompts.py           All step prompts with {placeholders} for state injection
+scoring.py           Decomposed scoring — parse dimensions, compute weighted total
+guardrails.py        Runtime validation + auto-fix
+run_logger.py        Per-step metrics (tokens, cost, latency, tools, retries)
+checkpoint.py        Save/load pipeline state for resume
+tools.py             Tool definitions (web_search, read_file, generate_pdf)
+pdf_generator.py     Markdown to PDF via fpdf2
+mcp_client.py        MCP client for Google Sheets integration
+sheets_mcp_server.py MCP server — exposes append_row tool
+
+tests/               Unit tests (109 tests)
+eval/                Evaluation framework — automated checks + LLM-as-judge
+examples/            Example CV templates for setup
+docs/                Architecture plans
 ```
 
 ---
 
 ## Requirements
 
-- Python 3.9+
+- Python 3.10+
 - `anthropic`, `fpdf2`, `requests`, `beautifulsoup4`, `python-dotenv`, `markdown`
 - Anthropic API key
 - Brave Search API key (optional)
+- Google Cloud credentials (optional, for Sheets logging)

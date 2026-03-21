@@ -108,6 +108,71 @@ def keyword_match(state: dict) -> dict:
     }
 
 
+# ── Research quality checks (automated) ────────────────────────
+
+def company_research_completeness(state: dict) -> dict:
+    """Does company research contain the required sections?"""
+    research = state.get("company_research", "")
+    required = ["Company:", "Role:", "Compensation", "Notable"]
+    found = [s for s in required if s.lower() in research.lower()]
+    return {
+        "name": "Company research completeness",
+        "score": len(found),
+        "max_score": len(required),
+        "detail": f"{len(found)}/{len(required)} sections: {', '.join(found) if found else 'none'}",
+    }
+
+
+def role_analysis_completeness(state: dict) -> dict:
+    """Does role analysis contain the required sections?"""
+    analysis = state.get("role_analysis", "")
+    required = ["MUST-HAVE", "NICE-TO-HAVE", "KEY SIGNAL", "ROLE TYPE"]
+    found = [s for s in required if s.lower() in analysis.lower()]
+    return {
+        "name": "Role analysis completeness",
+        "score": len(found),
+        "max_score": len(required),
+        "detail": f"{len(found)}/{len(required)} sections: {', '.join(found) if found else 'none'}",
+    }
+
+
+def critic_loop_effectiveness(state: dict) -> dict:
+    """Did the critic loop run and produce a result?"""
+    critic = state.get("critic_result", {})
+    if not critic:
+        return {"name": "Critic loop", "score": 0, "max_score": 3, "detail": "No critic data"}
+
+    score = 0
+    details = []
+
+    # 1 point: critic ran
+    if critic.get("iterations", 0) > 0:
+        score += 1
+        details.append(f"{critic['iterations']} round(s)")
+
+    # 1 point: critic approved (vs hitting max iterations)
+    if critic.get("approved"):
+        score += 1
+        details.append("approved")
+    else:
+        details.append("not approved")
+
+    # 1 point: at least one round had actionable feedback
+    rounds = critic.get("rounds", [])
+    has_feedback = any(r.get("revision_issues") for r in rounds if not r.get("approved"))
+    if has_feedback:
+        score += 1
+        total_issues = sum(len(r.get("revision_issues", [])) for r in rounds)
+        details.append(f"{total_issues} issue(s) found")
+
+    return {
+        "name": "Critic loop effectiveness",
+        "score": score,
+        "max_score": 3,
+        "detail": "; ".join(details),
+    }
+
+
 # ── LLM-as-judge checks (costs tokens, uses Haiku) ───────────
 
 def _judge(client: anthropic.Anthropic, prompt: str) -> tuple[int, str]:
@@ -184,14 +249,56 @@ Explanation: (1-2 sentences)"""
     return {"name": "Gap accuracy (judge)", "score": score, "max_score": 5, "detail": detail}
 
 
+def judge_research_quality(client: anthropic.Anthropic, state: dict) -> dict:
+    """Rate 1-5: Does company research go beyond the JD with useful insights?"""
+    prompt = f"""Rate 1-5: Does this company research provide useful insights beyond what's in the job description?
+Look for: company stage/size, recent news, compensation data, culture signals, competitive context.
+A score of 1 means it just restates the JD. A score of 5 means it surfaces genuinely new information.
+
+JOB DESCRIPTION (first 500 chars):
+{state.get('job_description', '')[:500]}
+
+COMPANY RESEARCH:
+{state.get('company_research', '')[:2000]}
+
+Respond with:
+Score: X
+Explanation: (1-2 sentences)"""
+
+    score, detail = _judge(client, prompt)
+    return {"name": "Research quality (judge)", "score": score, "max_score": 5, "detail": detail}
+
+
+def judge_role_analysis_quality(client: anthropic.Anthropic, state: dict) -> dict:
+    """Rate 1-5: Does role analysis distinguish must-haves from nice-to-haves accurately?"""
+    prompt = f"""Rate 1-5: How well does this role analysis distinguish true must-haves from nice-to-haves?
+Look for: accurate seniority assessment, realistic key signals for ATS, useful role type inference.
+A score of 1 means it just lists JD requirements. A score of 5 means it reveals what the hiring manager actually cares about.
+
+JOB DESCRIPTION:
+{state.get('job_description', '')[:2000]}
+
+ROLE ANALYSIS:
+{state.get('role_analysis', '')[:2000]}
+
+Respond with:
+Score: X
+Explanation: (1-2 sentences)"""
+
+    score, detail = _judge(client, prompt)
+    return {"name": "Role analysis quality (judge)", "score": score, "max_score": 5, "detail": detail}
+
+
 # ── Which checks apply to which steps ─────────────────────────
 
 STEP_CHECKS = {
-    "company_research": [],  # No automated quality checks yet
+    "company_research": ["company_research_completeness", "judge_research_quality"],
+    "role_analysis": ["role_analysis_completeness", "judge_role_analysis_quality"],
     "gap_analysis": ["score_parse_success", "judge_gap_accuracy"],
     "project_selection": [],
     "cv_construction": ["cv_word_count", "cv_guardrail", "keyword_match", "judge_cv_relevance"],
     "cover_letter": ["cl_word_count", "cl_guardrail", "judge_cl_specificity"],
+    "critic_loop": ["critic_loop_effectiveness"],
 }
 
 ALL_AUTOMATED = {
@@ -199,12 +306,17 @@ ALL_AUTOMATED = {
     "cv_word_count": cv_word_count,
     "cl_word_count": cl_word_count,
     "keyword_match": keyword_match,
+    "company_research_completeness": company_research_completeness,
+    "role_analysis_completeness": role_analysis_completeness,
+    "critic_loop_effectiveness": critic_loop_effectiveness,
 }
 
 ALL_JUDGE = {
     "judge_cv_relevance": judge_cv_relevance,
     "judge_cl_specificity": judge_cl_specificity,
     "judge_gap_accuracy": judge_gap_accuracy,
+    "judge_research_quality": judge_research_quality,
+    "judge_role_analysis_quality": judge_role_analysis_quality,
 }
 
 
@@ -244,6 +356,9 @@ def run_automated_checks(state: dict, candidate_name: str = "") -> list[dict]:
         cl_word_count(state),
         guardrail_pass(state, candidate_name),
         keyword_match(state),
+        company_research_completeness(state),
+        role_analysis_completeness(state),
+        critic_loop_effectiveness(state),
     ]
 
 
@@ -253,6 +368,8 @@ def run_judge_checks(client: anthropic.Anthropic, state: dict) -> list[dict]:
         judge_cv_relevance(client, state),
         judge_cl_specificity(client, state),
         judge_gap_accuracy(client, state),
+        judge_research_quality(client, state),
+        judge_role_analysis_quality(client, state),
     ]
 
 

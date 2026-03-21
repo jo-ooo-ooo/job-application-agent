@@ -115,10 +115,10 @@ def main():
     master_list_path = PROJECT_DIR / "cvs" / "projects_master_list.md"
     template_path = PROJECT_DIR / "cvs" / "template_standard.md"
     if not master_list_path.exists():
-        print(f"Error: {master_list_path} not found. See cvs_examples/ for format.")
+        print(f"Error: {master_list_path} not found. See examples/ for format.")
         sys.exit(1)
     if not template_path.exists():
-        print(f"Error: {template_path} not found. See cvs_examples/ for format.")
+        print(f"Error: {template_path} not found. See examples/ for format.")
         sys.exit(1)
 
     # Extract candidate name from template for guardrail checks
@@ -213,6 +213,14 @@ def main():
                 score = compute_weighted_score(new_scores)
                 recommendation = get_recommendation(score)
                 print(format_score_summary(new_scores, score, recommendation))
+            else:
+                # Fallback: extract overall score like "Updated Score: 72/100"
+                import re
+                m = re.search(r'(\d+)/100', reassessment)
+                if m:
+                    score = float(m.group(1))
+                    recommendation = get_recommendation(score)
+                    print(f"\n  Updated score: {score:.0f}/100 — {recommendation}")
 
         # Store final score in state so Sheets logging always uses the latest
         state["final_score"] = score
@@ -291,7 +299,7 @@ def main():
     if "cv_construction" not in completed_steps:
         print("\n[Step 4/6] Constructing tailored CV...")
         metrics = logger.start_step("cv_construction")
-        state["cv_markdown"] = run_step(
+        raw_cv = run_step(
             client, SYSTEM_PROMPT,
             STEP_CV_CONSTRUCTION.format(
                 job_description=state["job_description"],
@@ -299,7 +307,9 @@ def main():
                 project_selection=state["project_selection"],
             ),
             metrics=metrics, step_name="cv_construction",
+            exclude_tools=["generate_pdf"],
         )
+        state["cv_markdown"] = _strip_code_fences(raw_cv)
         logger.finish_step()
         completed_steps.append("cv_construction")
         save_checkpoint(run_id, state, completed_steps, completed_gates)
@@ -311,7 +321,7 @@ def main():
     if "cover_letter" not in completed_steps:
         print("\n[Step 5/6] Writing cover letter...")
         metrics = logger.start_step("cover_letter")
-        state["cover_letter_markdown"] = run_step(
+        raw_cl = run_step(
             client, SYSTEM_PROMPT,
             STEP_COVER_LETTER.format(
                 job_description=state["job_description"],
@@ -319,7 +329,9 @@ def main():
                 gap_analysis=state["gap_analysis"],
             ),
             metrics=metrics, step_name="cover_letter",
+            exclude_tools=["generate_pdf"],
         )
+        state["cover_letter_markdown"] = _strip_code_fences(raw_cl)
         logger.finish_step()
         completed_steps.append("cover_letter")
         save_checkpoint(run_id, state, completed_steps, completed_gates)
@@ -328,7 +340,7 @@ def main():
     print(state["cover_letter_markdown"])
 
     # ── Critic Review Loop ────────────────────────────────────
-    state["cv_markdown"], state["cover_letter_markdown"], critic_rounds = run_critic_loop(
+    critic_result = run_critic_loop(
         client,
         job_description=state["job_description"],
         role_analysis=state["role_analysis"],
@@ -336,15 +348,35 @@ def main():
         cover_letter_markdown=state["cover_letter_markdown"],
         logger=logger,
     )
-    print(f"  [critic] Completed in {critic_rounds} round(s)")
+    state["cv_markdown"] = _strip_code_fences(critic_result.cv_markdown)
+    state["cover_letter_markdown"] = _strip_code_fences(critic_result.cover_letter_markdown)
+    state["critic_result"] = critic_result.to_dict()
+    save_checkpoint(run_id, state, completed_steps, completed_gates)
 
-    # Run structural guardrails as a final safety net (no auto-fix, just warn)
+    # Run structural guardrails as a safety net — auto-fix if issues detected
     cv_warnings = validate_cv(state["cv_markdown"], candidate_name)
     cl_warnings = validate_cover_letter(state["cover_letter_markdown"], candidate_name)
-    if cv_warnings:
-        print(format_warnings(cv_warnings, "CV"))
-    if cl_warnings:
-        print(format_warnings(cl_warnings, "Cover Letter"))
+    if cv_warnings or cl_warnings:
+        if cv_warnings:
+            print(format_warnings(cv_warnings, "CV"))
+        if cl_warnings:
+            print(format_warnings(cl_warnings, "Cover Letter"))
+        print("  [guardrail] Structural issues detected. Asking the model to fix...")
+        metrics = logger.start_step("guardrail_fix")
+        from prompts import STEP_REVISION
+        fix_prompt = STEP_REVISION.format(
+            feedback="Fix these structural issues:\n" + "\n".join(
+                [f"- CV: {w}" for w in cv_warnings] +
+                [f"- Cover Letter: {w}" for w in cl_warnings]
+            ),
+            job_description=state["job_description"],
+            cv_markdown=state["cv_markdown"],
+            cover_letter_markdown=state["cover_letter_markdown"],
+        )
+        fix_result = run_step(client, SYSTEM_PROMPT, fix_prompt, metrics=metrics, step_name="revision", exclude_tools=["generate_pdf"])
+        logger.finish_step()
+        state["cv_markdown"] = _extract_section(fix_result, "CV", state["cv_markdown"])
+        state["cover_letter_markdown"] = _extract_section(fix_result, "Cover Letter", state["cover_letter_markdown"])
 
     # ── STOP Gate 2 ───────────────────────────────────────────
     while True:
@@ -645,6 +677,15 @@ def _extract_questions(gap_text: str) -> list[str]:
                 questions.append(q)
 
     return questions
+
+
+def _strip_code_fences(text: str) -> str:
+    """Strip markdown code fences (```markdown ... ```) from model output."""
+    import re
+    # Remove opening ```markdown or ``` and closing ```
+    stripped = re.sub(r'^```\w*\n', '', text.strip())
+    stripped = re.sub(r'\n```\s*$', '', stripped)
+    return stripped.strip()
 
 
 def _extract_section(text: str, section_name: str, fallback: str) -> str:

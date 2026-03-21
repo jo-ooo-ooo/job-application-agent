@@ -26,8 +26,10 @@ STEP_TEMPERATURES = {
 DEFAULT_TEMPERATURE = 0
 
 
-def _api_call_with_retry(client, system_prompt, messages, temperature=0, metrics=None):
+def _api_call_with_retry(client, system_prompt, messages, temperature=0, metrics=None, tools=None):
     """Call the Anthropic API with retry logic for connection and rate limit errors."""
+    if tools is None:
+        tools = TOOL_DEFINITIONS
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             response = client.messages.create(
@@ -35,13 +37,13 @@ def _api_call_with_retry(client, system_prompt, messages, temperature=0, metrics
                 max_tokens=4096,
                 temperature=temperature,
                 system=system_prompt,
-                tools=TOOL_DEFINITIONS,
+                tools=tools,
                 messages=messages,
             )
             if metrics:
                 metrics.record_api_response(response)
             return response
-        except anthropic.RateLimitError:
+        except (anthropic.RateLimitError, anthropic.OverloadedError):
             if metrics:
                 metrics.record_retry()
             if attempt == MAX_RETRIES:
@@ -64,6 +66,7 @@ def run_step(
     user_message: str,
     metrics: StepMetrics = None,
     step_name: str = None,
+    exclude_tools: list[str] = None,
 ) -> str:
     """Run a single stateless step.
 
@@ -71,12 +74,17 @@ def run_step(
     The caller is responsible for injecting relevant state into user_message.
     Optionally accepts a StepMetrics object to track tokens/latency/tools.
     step_name is used to look up the appropriate temperature.
+    exclude_tools filters out specific tools (e.g. ["generate_pdf"]).
     """
     temperature = STEP_TEMPERATURES.get(step_name, DEFAULT_TEMPERATURE)
     messages = [{"role": "user", "content": user_message}]
 
+    tools = TOOL_DEFINITIONS
+    if exclude_tools:
+        tools = [t for t in TOOL_DEFINITIONS if t["name"] not in exclude_tools]
+
     while True:
-        response = _api_call_with_retry(client, system_prompt, messages, temperature, metrics)
+        response = _api_call_with_retry(client, system_prompt, messages, temperature, metrics, tools=tools)
 
         assistant_content = response.content
         messages.append({"role": "assistant", "content": assistant_content})

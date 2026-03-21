@@ -302,7 +302,14 @@ CURRENT COVER LETTER:
 {cover_letter_markdown}
 
 Fix ALL listed issues. Output both revised documents as markdown.
-First the CV, then a line with only "---", then the cover letter.
+
+OUTPUT FORMAT (follow exactly):
+## REVISED CV
+[full CV markdown here]
+
+## REVISED COVER LETTER
+[full cover letter markdown here]
+
 Rules: Never invent new experience. Only address the specific issues listed.
 """
 

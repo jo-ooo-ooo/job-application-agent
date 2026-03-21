@@ -2,9 +2,9 @@
 """Evaluation runner — measure output quality across sample JDs.
 
 Three modes:
-  python3 eval.py --logs                              Analyze past run logs (no API calls)
-  python3 eval.py --dataset eval_jobs/                Run full pipeline on sample JDs
-  python3 eval.py --step cv_construction --dataset eval_jobs/   Evaluate a single step only
+  python3 eval/eval.py --logs                          Analyze past run logs (no API calls)
+  python3 eval/eval.py --dataset eval/jobs/            Run full pipeline on sample JDs
+  python3 eval/eval.py --step cv_construction --dataset eval/jobs/  Evaluate a single step only
 """
 
 import argparse
@@ -14,6 +14,9 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+
+# Add project root to path so we can import from the main package
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import anthropic
 from dotenv import load_dotenv
@@ -39,7 +42,7 @@ from tools import PROJECT_DIR
 
 load_dotenv()
 
-EVAL_RESULTS_DIR = Path(__file__).parent / "eval_results"
+EVAL_RESULTS_DIR = Path(__file__).parent / "results"
 
 # Steps in pipeline order, with their prompt template and required state keys
 PIPELINE_STEPS = [

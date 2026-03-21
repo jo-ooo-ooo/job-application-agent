@@ -1,11 +1,10 @@
 .env
 cvs/
-cv/
 output/
 logs/
-eval_results/
-eval_jobs/
 checkpoints/
+eval/jobs/
+eval/results/
 .claude/
 __pycache__/
 *.pyc
