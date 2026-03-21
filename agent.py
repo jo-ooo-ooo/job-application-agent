@@ -21,6 +21,7 @@ STEP_TEMPERATURES = {
     "cv_construction": 0.3,
     "cover_letter": 0.4,
     "revision": 0.3,
+    "critic_review": 0,
 }
 DEFAULT_TEMPERATURE = 0
 

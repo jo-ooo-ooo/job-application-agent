@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import patch, MagicMock
-from agents import run_parallel_research
+from agents import run_parallel_research, run_critic_loop, _split_revision
 
 
 class TestRunParallelResearch:
@@ -60,3 +60,104 @@ class TestRunParallelResearch:
 
         assert "Error" in result["company_research"]
         assert "MUST-HAVES" in result["role_analysis"]
+
+
+class TestRunCriticLoop:
+    """Test that the critic reviews and the writer revises in a loop."""
+
+    @patch("agents.run_step")
+    def test_approved_on_first_try(self, mock_run_step):
+        """If critic says APPROVED, no revision happens."""
+        mock_run_step.return_value = "APPROVED"
+
+        cv, cl, iterations = run_critic_loop(
+            client=MagicMock(),
+            job_description="Some JD",
+            role_analysis="MUST-HAVES: Python",
+            cv_markdown="# Jane Doe\n## Experience\n...",
+            cover_letter_markdown="Dear Manager,\n...",
+            logger=MagicMock(),
+        )
+
+        assert iterations == 1
+        assert cv == "# Jane Doe\n## Experience\n..."
+        assert cl == "Dear Manager,\n..."
+
+    @patch("agents.run_step")
+    def test_revision_then_approved(self, mock_run_step):
+        """Critic requests revision, writer fixes, critic approves."""
+        mock_run_step.side_effect = [
+            "REVISIONS NEEDED:\n- CV: Add Python to skills section",
+            "# Jane Doe\n## Experience\n...\n---\nDear Manager, revised...",
+            "APPROVED",
+        ]
+
+        cv, cl, iterations = run_critic_loop(
+            client=MagicMock(),
+            job_description="Some JD",
+            role_analysis="MUST-HAVES: Python",
+            cv_markdown="# Jane Doe\n## Experience\n...",
+            cover_letter_markdown="Dear Manager,\n...",
+            logger=MagicMock(),
+        )
+
+        assert iterations == 2
+
+    @patch("agents.run_step")
+    def test_max_iterations_reached(self, mock_run_step):
+        """After max iterations, return latest version even without approval."""
+        mock_run_step.return_value = "REVISIONS NEEDED:\n- CV: Still needs work"
+
+        cv, cl, iterations = run_critic_loop(
+            client=MagicMock(),
+            job_description="Some JD",
+            role_analysis="MUST-HAVES: Python",
+            cv_markdown="# Jane Doe",
+            cover_letter_markdown="Dear Manager",
+            logger=MagicMock(),
+            max_iterations=3,
+        )
+
+        assert iterations == 3
+
+    @patch("agents.run_step")
+    def test_revision_output_parsed_correctly(self, mock_run_step):
+        """Writer revision output should be split into CV and CL by --- separator."""
+        mock_run_step.side_effect = [
+            "REVISIONS NEEDED:\n- CV: Add metrics",
+            "# Jane Doe\nUpdated CV content\n---\nDear Manager,\nUpdated CL content",
+            "APPROVED",
+        ]
+
+        cv, cl, iterations = run_critic_loop(
+            client=MagicMock(),
+            job_description="Some JD",
+            role_analysis="MUST-HAVES: Python",
+            cv_markdown="# Jane Doe\nOld CV",
+            cover_letter_markdown="Dear Manager,\nOld CL",
+            logger=MagicMock(),
+        )
+
+        assert "Updated CV content" in cv
+        assert "Updated CL content" in cl
+
+
+class TestSplitRevision:
+    def test_clean_split(self):
+        text = "# CV content\n---\nDear Manager, cover letter"
+        cv, cl = _split_revision(text, "fallback cv", "fallback cl")
+        assert "CV content" in cv
+        assert "cover letter" in cl
+
+    def test_no_separator_returns_fallback(self):
+        text = "Just some text without separator"
+        cv, cl = _split_revision(text, "fallback cv", "fallback cl")
+        assert cv == "fallback cv"
+        assert cl == "fallback cl"
+
+    def test_multiple_separators_splits_on_first(self):
+        text = "Part 1\n---\nPart 2\n---\nPart 3"
+        cv, cl = _split_revision(text, "fb", "fb")
+        assert cv == "Part 1"
+        assert "Part 2" in cl
+        assert "Part 3" in cl
