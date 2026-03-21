@@ -12,6 +12,7 @@ RETRY_DELAY = 5  # seconds
 # Temperature per step type — analytical steps get 0, creative steps get some variance
 STEP_TEMPERATURES = {
     "company_research": 0,
+    "role_analysis": 0,
     "hiring_manager": 0,
     "gap_analysis": 0,
     "gap_reassessment": 0,
