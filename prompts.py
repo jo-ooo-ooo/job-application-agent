@@ -55,15 +55,28 @@ Output a SHORT summary (max 12 lines):
 Don't repeat the full JD back. Focus on insights the candidate can't get from reading the JD alone.
 """
 
-STEP_HIRING_MANAGER = """\
-Do a quick search for hiring manager: {manager_name}
+STEP_ROLE_ANALYSIS = """\
+Analyze this job description deeply from a hiring manager's perspective.
 
-Give a 3-4 line summary of anything useful (background, values, public writing).
-If nothing useful found, just say "No public info found" and move on.
-"""
+JOB DESCRIPTION:
+{job_description}
 
-STEP_HIRING_MANAGER_SKIP = """\
-No hiring manager provided. Just respond: "No hiring manager specified — skipping."
+Go beyond surface-level requirements. Output a SHORT analysis (max 15 lines):
+
+MUST-HAVES (non-negotiable — candidate gets filtered without these):
+- [list the 3-5 requirements that are truly required, not wish-list items]
+
+NICE-TO-HAVES (bonus points, but won't get you filtered):
+- [list items that are clearly preferred but not required]
+
+REAL SENIORITY: [What level are they actually hiring for? Sometimes the JD says
+"senior" but the requirements suggest mid-level, or vice versa. Call it out.]
+
+KEY SIGNALS: [What keywords, technologies, or phrases should appear in the CV
+to pass ATS and catch the hiring manager's eye? List 5-8.]
+
+ROLE TYPE: [New headcount or backfill? IC or people management? Strategic or execution-heavy?
+Infer from clues in the JD.]
 """
 
 STEP_GAP_ANALYSIS = """\
@@ -74,6 +87,9 @@ JOB DESCRIPTION:
 
 ROLE CONTEXT (from research):
 {company_research}
+
+ROLE ANALYSIS:
+{role_analysis}
 
 CANDIDATE EXPERIENCE (read from file):
 Use read_file to read cvs/projects_master_list.md
@@ -191,9 +207,6 @@ ROLE CONTEXT:
 SELECTED EXPERIENCE:
 {project_selection}
 
-HIRING MANAGER CONTEXT:
-{manager_research}
-
 Read cvs/template_standard.md for the format.
 
 Rules:
@@ -222,9 +235,6 @@ ROLE CONTEXT:
 GAP ANALYSIS:
 {gap_analysis}
 
-HIRING MANAGER:
-{manager_research}
-
 CANDIDATE NAME (from CV template):
 Read cvs/template_standard.md to get the candidate's name for the sign-off.
 
@@ -235,9 +245,65 @@ Guidelines:
 - Highlight 2-3 strongest fits, framed as value to THEM not achievements of yours
 - Under 400 words
 - Professional but human, not generic or sycophantic
-- If hiring manager name is known, address them directly
 
 Output ONLY the cover letter markdown. No commentary.
+"""
+
+STEP_CRITIC_REVIEW = """\
+You are a hiring manager reviewing this application. Be specific and actionable.
+
+JOB DESCRIPTION:
+{job_description}
+
+ROLE ANALYSIS:
+{role_analysis}
+
+CV:
+{cv_markdown}
+
+COVER LETTER:
+{cover_letter_markdown}
+
+Review both documents as if you're deciding whether to interview this candidate.
+Check for:
+1. Are the must-have skills from the role analysis clearly visible?
+2. Are key signals/keywords present for ATS?
+3. Is the most relevant experience given the most space?
+4. Are bullet points specific (Action + Result + Impact) or vague?
+5. Does the cover letter show genuine understanding of the company?
+6. Is anything misleading, generic, or buried that should be prominent?
+
+If BOTH documents are strong enough to get an interview, respond with exactly:
+APPROVED
+
+Otherwise, give specific revision instructions. Be direct:
+REVISIONS NEEDED:
+- CV: [specific issue and how to fix it]
+- CV: [another issue]
+- Cover Letter: [specific issue and how to fix it]
+
+Max 5 revision items. Focus on what would actually change the hiring decision.
+Do NOT nitpick formatting or style. Focus on substance and positioning.
+"""
+
+STEP_CRITIC_REVISION = """\
+A hiring manager reviewed your CV and cover letter and found issues. Fix them.
+
+REVISION INSTRUCTIONS:
+{critic_feedback}
+
+JOB DESCRIPTION:
+{job_description}
+
+CURRENT CV:
+{cv_markdown}
+
+CURRENT COVER LETTER:
+{cover_letter_markdown}
+
+Fix ALL listed issues. Output both revised documents as markdown.
+First the CV, then a line with only "---", then the cover letter.
+Rules: Never invent new experience. Only address the specific issues listed.
 """
 
 STEP_REVISION = """\
@@ -256,38 +322,6 @@ CURRENT COVER LETTER:
 
 Rules: Never invent new experience. Output both revised documents as markdown,
 separated by a clear "---" and headers.
-"""
-
-STEP_GUARDRAIL_FIX_CV = """\
-The CV below has quality issues that must be fixed:
-
-ISSUES:
-{warnings}
-
-CURRENT CV:
-{cv_markdown}
-
-CANDIDATE TEMPLATE (for reference — contains real name, contact info):
-Read cvs/template_standard.md
-
-Fix ALL listed issues. Output ONLY the corrected CV markdown. No commentary.
-Rules: Never invent new experience. Only fix the specific issues listed.
-"""
-
-STEP_GUARDRAIL_FIX_CL = """\
-The cover letter below has quality issues that must be fixed:
-
-ISSUES:
-{warnings}
-
-CURRENT COVER LETTER:
-{cl_markdown}
-
-CANDIDATE TEMPLATE (for name reference):
-Read cvs/template_standard.md
-
-Fix ALL listed issues. Output ONLY the corrected cover letter markdown. No commentary.
-Rules: Never invent new experience. Only fix the specific issues listed.
 """
 
 STEP_PDF_GENERATION = """\
