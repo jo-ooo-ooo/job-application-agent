@@ -3,6 +3,8 @@
 import pytest
 from unittest.mock import patch, MagicMock
 from agents import run_parallel_research, run_critic_loop, _split_revision, CriticResult, _extract_revision_issues
+from agents import _format_cv_for_review
+import json
 
 
 class TestRunParallelResearch:
@@ -257,3 +259,26 @@ class TestExtractRevisionIssues:
         text = "Some commentary\n- CV: Real issue\nMore text"
         issues = _extract_revision_issues(text)
         assert len(issues) == 1
+
+
+class TestFormatCvForReview:
+    def test_formats_json_cv(self):
+        cv_json = json.dumps({
+            "name": "Jane Doe",
+            "title_tagline": "Senior PM",
+            "skills": {"Product": ["A/B testing"]},
+            "experience": [{"title": "PM", "company": "Acme", "dates": "2022 -- 2025", "bullets": ["Did stuff"]}],
+            "education": {"degree": "BA", "university": "MIT"},
+        })
+        result = _format_cv_for_review(cv_json)
+        assert "Jane Doe" in result
+        assert "Acme" in result
+        assert "Did stuff" in result
+
+    def test_returns_markdown_as_is(self):
+        md = "# Jane Doe\n## Experience\nSome content"
+        assert _format_cv_for_review(md) == md
+
+    def test_handles_empty_string(self):
+        result = _format_cv_for_review("")
+        assert result == ""

@@ -155,6 +155,42 @@ def run_parallel_research(
     return results
 
 
+def _format_cv_for_review(cv_content: str) -> str:
+    """Format CV content for human-readable review by the critic.
+
+    If cv_content is JSON, renders it as readable text.
+    If it's markdown (legacy), returns as-is.
+    """
+    import json
+    try:
+        data = json.loads(cv_content)
+        lines = [f"Name: {data.get('name', '')}"]
+        lines.append(f"Tagline: {data.get('title_tagline', '')}")
+        if data.get('skills'):
+            lines.append("\nSkills:")
+            for cat, items in data['skills'].items():
+                lines.append(f"  {cat}: {', '.join(items)}")
+        if data.get('experience'):
+            lines.append("\nExperience:")
+            for exp in data['experience']:
+                lines.append(f"\n  {exp['title']} — {exp['company']} ({exp['dates']})")
+                if exp.get('company_description'):
+                    lines.append(f"  {exp['company_description']}")
+                for b in exp.get('bullets', []):
+                    lines.append(f"  - {b}")
+        if data.get('side_projects'):
+            lines.append("\nProjects:")
+            for p in data['side_projects']:
+                lines.append(f"\n  {p['name']}")
+                for b in p.get('bullets', []):
+                    lines.append(f"  - {b}")
+        if data.get('education'):
+            lines.append(f"\nEducation: {data['education'].get('degree', '')} — {data['education'].get('university', '')}")
+        return '\n'.join(lines)
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return cv_content  # Legacy markdown fallback
+
+
 def run_critic_loop(
     client,
     job_description: str,
@@ -185,7 +221,7 @@ def run_critic_loop(
             STEP_CRITIC_REVIEW.format(
                 job_description=job_description,
                 role_analysis=role_analysis,
-                cv_markdown=cv,
+                cv_display=_format_cv_for_review(cv),
                 cover_letter_markdown=cl,
             ),
             metrics=metrics, step_name="critic_review",
@@ -244,7 +280,7 @@ def run_critic_loop(
             STEP_CRITIC_REVISION.format(
                 critic_feedback=review,
                 job_description=job_description,
-                cv_markdown=cv,
+                cv_json=cv,
                 cover_letter_markdown=cl,
             ),
             metrics=metrics, step_name="revision",
