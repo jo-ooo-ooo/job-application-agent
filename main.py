@@ -2,6 +2,7 @@
 """Job Application Agent — structured state approach with hiring manager perspective."""
 
 import argparse
+import json as _json
 import os
 import sys
 from pathlib import Path
@@ -26,6 +27,8 @@ from scoring import (
     is_borderline,
     format_score_summary,
 )
+from cv_data import parse_cv_json
+from latex_generator import generate_cv_pdf, generate_cover_letter_pdf
 from prompts import (
     SYSTEM_PROMPT,
     STEP_GAP_ANALYSIS,
@@ -35,7 +38,6 @@ from prompts import (
     STEP_CV_CONSTRUCTION,
     STEP_COVER_LETTER,
     STEP_REVISION,
-    STEP_PDF_GENERATION,
 )
 from agents import run_parallel_research, run_critic_loop
 from tools import PROJECT_DIR
@@ -43,6 +45,7 @@ from pdf_generator import generate_pdf_from_markdown
 from mcp_client import SheetsClient
 from guardrails import (
     validate_cv,
+    validate_cv_structured,
     validate_cover_letter,
     validate_gap_analysis,
     extract_candidate_name,
@@ -151,6 +154,7 @@ def main():
             "gap_analysis": "",
             "project_selection": "",
             "cv_markdown": "",
+            "cv_json": "",
             "cover_letter_markdown": "",
         }
 
@@ -309,13 +313,26 @@ def main():
             metrics=metrics, step_name="cv_construction",
             exclude_tools=["generate_pdf"],
         )
-        state["cv_markdown"] = _strip_code_fences(raw_cv)
+        # Parse structured JSON output
+        try:
+            cv_data = parse_cv_json(raw_cv)
+            # Store clean JSON (re-serialized from parsed data)
+            state["cv_json"] = _json.dumps(cv_data.__dict__, default=lambda o: o.__dict__, indent=2)
+        except (ValueError, KeyError) as e:
+            print(f"  [warning] Failed to parse structured CV: {e}")
+            print("  [warning] Falling back to markdown CV.")
+            state["cv_markdown"] = _strip_code_fences(raw_cv)
         logger.finish_step()
         completed_steps.append("cv_construction")
         save_checkpoint(run_id, state, completed_steps, completed_gates)
     else:
         print("\n[Step 4/6] CV construction — skipped (cached)")
-    print(state["cv_markdown"])
+    # Display CV content for user review
+    if state.get("cv_json"):
+        from agents import _format_cv_for_review
+        print(_format_cv_for_review(state["cv_json"]))
+    else:
+        print(state.get("cv_markdown", ""))
 
     # ── Step 6: Cover Letter ──────────────────────────────────
     if "cover_letter" not in completed_steps:
@@ -340,21 +357,36 @@ def main():
     print(state["cover_letter_markdown"])
 
     # ── Critic Review Loop ────────────────────────────────────
+    # Use structured JSON if available, fall back to markdown
+    cv_for_critic = state.get("cv_json") or state.get("cv_markdown", "")
+
     critic_result = run_critic_loop(
         client,
         job_description=state["job_description"],
         role_analysis=state["role_analysis"],
-        cv_markdown=state["cv_markdown"],
+        cv_markdown=cv_for_critic,
         cover_letter_markdown=state["cover_letter_markdown"],
         logger=logger,
     )
-    state["cv_markdown"] = _strip_code_fences(critic_result.cv_markdown)
+
+    # Update state from critic result
+    if state.get("cv_json"):
+        state["cv_json"] = critic_result.cv_markdown
+    else:
+        state["cv_markdown"] = _strip_code_fences(critic_result.cv_markdown)
     state["cover_letter_markdown"] = _strip_code_fences(critic_result.cover_letter_markdown)
     state["critic_result"] = critic_result.to_dict()
     save_checkpoint(run_id, state, completed_steps, completed_gates)
 
     # Run structural guardrails as a safety net — auto-fix if issues detected
-    cv_warnings = validate_cv(state["cv_markdown"], candidate_name)
+    if state.get("cv_json"):
+        try:
+            cv_dict = _json.loads(state["cv_json"])
+            cv_warnings = validate_cv_structured(cv_dict, candidate_name)
+        except _json.JSONDecodeError:
+            cv_warnings = ["CV JSON is malformed after critic loop."]
+    else:
+        cv_warnings = validate_cv(state.get("cv_markdown", ""), candidate_name)
     cl_warnings = validate_cover_letter(state["cover_letter_markdown"], candidate_name)
     if cv_warnings or cl_warnings:
         if cv_warnings:
@@ -363,19 +395,23 @@ def main():
             print(format_warnings(cl_warnings, "Cover Letter"))
         print("  [guardrail] Structural issues detected. Asking the model to fix...")
         metrics = logger.start_step("guardrail_fix")
-        from prompts import STEP_REVISION
+        cv_for_fix = state.get("cv_json") or state.get("cv_markdown", "")
         fix_prompt = STEP_REVISION.format(
             feedback="Fix these structural issues:\n" + "\n".join(
                 [f"- CV: {w}" for w in cv_warnings] +
                 [f"- Cover Letter: {w}" for w in cl_warnings]
             ),
             job_description=state["job_description"],
-            cv_markdown=state["cv_markdown"],
+            cv_json=cv_for_fix,
             cover_letter_markdown=state["cover_letter_markdown"],
         )
         fix_result = run_step(client, SYSTEM_PROMPT, fix_prompt, metrics=metrics, step_name="revision", exclude_tools=["generate_pdf"])
         logger.finish_step()
-        state["cv_markdown"] = _extract_section(fix_result, "CV", state["cv_markdown"])
+        revised_cv = _extract_section(fix_result, "CV", cv_for_fix)
+        if state.get("cv_json"):
+            state["cv_json"] = revised_cv
+        else:
+            state["cv_markdown"] = revised_cv
         state["cover_letter_markdown"] = _extract_section(fix_result, "Cover Letter", state["cover_letter_markdown"])
 
     # ── STOP Gate 2 ───────────────────────────────────────────
@@ -400,24 +436,29 @@ def main():
                 continue
             print("\nRevising based on your feedback...")
             metrics = logger.start_step("revision")
+            cv_for_revision = state.get("cv_json") or state.get("cv_markdown", "")
             revision = run_step(
                 client, SYSTEM_PROMPT,
                 STEP_REVISION.format(
                     feedback=feedback,
                     job_description=state["job_description"],
-                    cv_markdown=state["cv_markdown"],
+                    cv_json=cv_for_revision,
                     cover_letter_markdown=state["cover_letter_markdown"],
                 ),
                 metrics=metrics, step_name="revision",
             )
             logger.finish_step()
             print(revision)
-            state["cv_markdown"] = _extract_section(revision, "CV", state["cv_markdown"])
+            revised_cv = _extract_section(revision, "CV", cv_for_revision)
             state["cover_letter_markdown"] = _extract_section(revision, "Cover Letter", state["cover_letter_markdown"])
+            if state.get("cv_json"):
+                state["cv_json"] = revised_cv
+            else:
+                state["cv_markdown"] = revised_cv
         else:
             print("Invalid choice. Enter 'a', 'r', or 'q'.")
 
-    # ── Step 6: PDF Generation (no LLM needed) ───────────────
+    # ── Step 6: PDF Generation ───────────────────────────────
     print("\n[Step 6/6] Generating PDFs...")
     output_dir = PROJECT_DIR / "output"
     output_dir.mkdir(exist_ok=True)
@@ -425,10 +466,43 @@ def main():
     cv_path = output_dir / "cv.pdf"
     cl_path = output_dir / "cover_letter.pdf"
 
-    cv_pages = generate_pdf_from_markdown(state["cv_markdown"], str(cv_path))
+    # CV: use LaTeX if structured JSON available, fall back to fpdf2
+    if state.get("cv_json"):
+        try:
+            cv_data = parse_cv_json(state["cv_json"])
+            cv_pages = generate_cv_pdf(cv_data, str(cv_path))
+        except Exception as e:
+            print(f"  [warning] LaTeX generation failed: {e}")
+            print("  [warning] Falling back to fpdf2.")
+            from agents import _format_cv_for_review
+            cv_pages = generate_pdf_from_markdown(_format_cv_for_review(state["cv_json"]), str(cv_path))
+    else:
+        cv_pages = generate_pdf_from_markdown(state.get("cv_markdown", ""), str(cv_path))
     print(f"  CV saved to {cv_path} ({cv_pages} page{'s' if cv_pages > 1 else ''})")
 
-    cl_pages = generate_pdf_from_markdown(state["cover_letter_markdown"], str(cl_path))
+    # Cover letter: use LaTeX, fall back to fpdf2
+    try:
+        # Get contact info from CV data
+        if state.get("cv_json"):
+            cv_info = _json.loads(state["cv_json"])
+            cl_name = cv_info.get("name", candidate_name)
+            cl_email = cv_info.get("email", "")
+            cl_phone = cv_info.get("phone", "")
+            cl_location = cv_info.get("location", "")
+        else:
+            cl_name = candidate_name
+            cl_email = ""
+            cl_phone = ""
+            cl_location = ""
+        cl_pages = generate_cover_letter_pdf(
+            cl_name, cl_email, cl_phone, cl_location,
+            state["cover_letter_markdown"],
+            str(cl_path),
+        )
+    except Exception as e:
+        print(f"  [warning] LaTeX cover letter failed: {e}")
+        print("  [warning] Falling back to fpdf2.")
+        cl_pages = generate_pdf_from_markdown(state["cover_letter_markdown"], str(cl_path))
     print(f"  Cover letter saved to {cl_path} ({cl_pages} page{'s' if cl_pages > 1 else ''})")
 
     # ── Log to Google Sheets via MCP ──────────────────────────
