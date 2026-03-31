@@ -1,0 +1,137 @@
+%-------------------------
+% CV Template — adapted from sb2nov/resume (MIT License)
+%-------------------------
+\documentclass[a4paper,11pt]{article}
+
+\usepackage{latexsym}
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage{marvosym}
+\usepackage[usenames,dvipsnames]{color}
+\usepackage{verbatim}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% Adjust margins
+\addtolength{\oddsidemargin}{-0.5in}
+\addtolength{\evensidemargin}{-0.5in}
+\addtolength{\textwidth}{1in}
+\addtolength{\topmargin}{-.5in}
+\addtolength{\textheight}{1.0in}
+
+\urlstyle{same}
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
+
+% Section formatting
+\titleformat{\section}{
+  \vspace{-4pt}\scshape\raggedright\large
+}{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
+
+% Custom commands
+\newcommand{\resumeItem}[1]{
+  \item\small{#1 \vspace{-2pt}}
+}
+
+\newcommand{\resumeSubheading}[4]{
+  \vspace{-2pt}\item
+    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & #2 \\
+      \textit{\small#3} & \textit{\small #4} \\
+    \end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\resumeProjectHeading}[2]{
+  \vspace{-2pt}\item
+    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & \small #2 \\
+    \end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
+
+\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
+
+\begin{document}
+
+%----------HEADING----------
+\begin{center}
+    \textbf{\Huge \scshape <<name>>} \\ \vspace{1pt}
+    \small <<phone>> $|$ \href{mailto:<<email>>}{<<email>>}<% if linkedin %> $|$ \href{<<linkedin>>}{LinkedIn}<% endif %><% if location %> $|$ <<location>><% endif %>
+\end{center}
+
+<% if title_tagline %>
+\vspace{-10pt}
+\begin{center}\small <<title_tagline>>\end{center}
+\vspace{-5pt}
+<% endif %>
+
+%-----------SKILLS-----------
+<% if skills %>
+\section{Skills}
+ \begin{itemize}[leftmargin=0.15in, label={}]
+    \small{\item{
+<% for category, items in skills.items() %>
+     \textbf{<<category>>}{: <<items|join(', ')>>} \\
+<% endfor %>
+    }}
+ \end{itemize}
+<% endif %>
+
+%-----------EXPERIENCE-----------
+<% if experience %>
+\section{Experience}
+  \resumeSubHeadingListStart
+<% for exp in experience %>
+    \resumeSubheading
+      {<<exp.title>>}{<<exp.dates>>}
+      {<<exp.company>><% if exp.company_description %> -- <<exp.company_description>><% endif %>}{<<exp.location>>}
+      \resumeItemListStart
+<% for bullet in exp.bullets %>
+        \resumeItem{<<bullet>>}
+<% endfor %>
+      \resumeItemListEnd
+<% endfor %>
+  \resumeSubHeadingListEnd
+<% endif %>
+
+%-----------PROJECTS-----------
+<% if side_projects %>
+\section{Projects}
+  \resumeSubHeadingListStart
+<% for proj in side_projects %>
+    \resumeProjectHeading
+      {<<proj.name>><% if proj.github_url %> $|$ \href{<<proj.github_url>>}{\underline{GitHub}}<% endif %>}{}
+      \resumeItemListStart
+<% for bullet in proj.bullets %>
+        \resumeItem{<<bullet>>}
+<% endfor %>
+      \resumeItemListEnd
+<% endfor %>
+  \resumeSubHeadingListEnd
+<% endif %>
+
+%-----------EDUCATION-----------
+<% if education %>
+\section{Education}
+  \resumeSubHeadingListStart
+    \resumeSubheading
+      {<<education.university>>}{}
+      {<<education.degree>>}{}
+  \resumeSubHeadingListEnd
+<% endif %>
+
+\end{document}
