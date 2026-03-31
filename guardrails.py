@@ -136,6 +136,70 @@ def validate_gap_analysis(gap_text: str) -> list[str]:
     return warnings
 
 
+def validate_cv_structured(cv_data: dict, candidate_name: str, max_total_bullets: int = 30) -> list[str]:
+    """Validate structured CV data (dict from JSON). Returns list of warning strings."""
+    warnings = []
+
+    if not cv_data:
+        warnings.append("CV data is empty.")
+        return warnings
+
+    # 1. Name check
+    name_in_cv = cv_data.get("name", "")
+    if candidate_name and candidate_name.lower() not in name_in_cv.lower():
+        warnings.append(
+            f"CV name ('{name_in_cv}') does not match candidate name ('{candidate_name}'). "
+            "The model may have hallucinated a different person."
+        )
+
+    # 2. Contact info
+    if not cv_data.get("email") and not cv_data.get("phone"):
+        warnings.append("CV has no email or phone number. Contact info may be missing.")
+
+    # 3. Experience must exist
+    experience = cv_data.get("experience", [])
+    if not experience:
+        warnings.append("CV has no experience entries.")
+
+    # 4. Total bullet count (proxy for page length)
+    total_bullets = sum(len(exp.get("bullets", [])) for exp in experience)
+    for proj in cv_data.get("side_projects", []):
+        total_bullets += len(proj.get("bullets", []))
+    if total_bullets > max_total_bullets:
+        warnings.append(
+            f"CV has {total_bullets} total bullets (max {max_total_bullets}). "
+            "It will likely exceed 1 page."
+        )
+
+    # 5. Placeholder detection in all text fields
+    placeholder_patterns = [
+        r'\[your name\]', r'\[company\]', r'\[insert', r'\[placeholder',
+        r'\[TODO\]', r'\[fill in\]', r'\[add ', r'XX/XXXX',
+    ]
+    all_text = _collect_all_text(cv_data)
+    for pattern in placeholder_patterns:
+        if re.search(pattern, all_text, re.IGNORECASE):
+            warnings.append(f"CV contains placeholder text matching: {pattern}")
+
+    return warnings
+
+
+def _collect_all_text(cv_data: dict) -> str:
+    """Collect all text from structured CV data for validation."""
+    parts = [
+        cv_data.get("name", ""),
+        cv_data.get("title_tagline", ""),
+    ]
+    for exp in cv_data.get("experience", []):
+        parts.append(exp.get("title", ""))
+        parts.append(exp.get("company", ""))
+        parts.extend(exp.get("bullets", []))
+    for proj in cv_data.get("side_projects", []):
+        parts.append(proj.get("name", ""))
+        parts.extend(proj.get("bullets", []))
+    return " ".join(parts)
+
+
 def extract_candidate_name(template_content: str) -> str:
     """Extract the candidate's name from the CV template (first H1 heading)."""
     match = re.search(r'^#\s+(.+)', template_content, re.MULTILINE)

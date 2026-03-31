@@ -191,3 +191,83 @@ class TestFormatWarnings:
         assert "GUARDRAIL" in output
         assert "CV" in output
         assert "Bad thing happened" in output
+
+
+# ── validate_cv_structured ────────────────────────────────────
+
+class TestValidateCvStructured:
+    GOOD_CV_DATA = {
+        "name": "Jane Doe",
+        "email": "jane@email.com",
+        "phone": "+49 123 456",
+        "location": "Berlin, Germany",
+        "title_tagline": "Senior PM | Growth & AI",
+        "skills": {"Product": ["A/B testing", "roadmaps"]},
+        "experience": [
+            {
+                "title": "Senior PM",
+                "company": "Company A",
+                "location": "Berlin",
+                "dates": "2022 -- 2025",
+                "bullets": [
+                    "Led platform migration serving 2M users",
+                    "Drove 30% improvement in deployment frequency",
+                ],
+            },
+            {
+                "title": "PM",
+                "company": "Company B",
+                "location": "Berlin",
+                "dates": "2019 -- 2022",
+                "bullets": ["Shipped analytics dashboard"],
+            },
+        ],
+        "education": {"degree": "MSc CS", "university": "Example University"},
+    }
+
+    def test_good_cv_no_warnings(self):
+        from guardrails import validate_cv_structured
+        assert validate_cv_structured(self.GOOD_CV_DATA, "Jane Doe") == []
+
+    def test_missing_name(self):
+        from guardrails import validate_cv_structured
+        data = {**self.GOOD_CV_DATA, "name": "Someone Else"}
+        warnings = validate_cv_structured(data, "Jane Doe")
+        assert any("name" in w.lower() for w in warnings)
+
+    def test_no_experience(self):
+        from guardrails import validate_cv_structured
+        data = {**self.GOOD_CV_DATA, "experience": []}
+        warnings = validate_cv_structured(data, "Jane Doe")
+        assert any("experience" in w.lower() for w in warnings)
+
+    def test_too_many_bullets(self):
+        from guardrails import validate_cv_structured
+        bloated_exp = {
+            "title": "PM", "company": "X", "location": "Y", "dates": "2020 -- 2025",
+            "bullets": [f"Bullet {i}" for i in range(15)],
+        }
+        data = {**self.GOOD_CV_DATA, "experience": [bloated_exp]}
+        warnings = validate_cv_structured(data, "Jane Doe", max_total_bullets=10)
+        assert any("bullet" in w.lower() for w in warnings)
+
+    def test_missing_email(self):
+        from guardrails import validate_cv_structured
+        data = {**self.GOOD_CV_DATA, "email": "", "phone": ""}
+        warnings = validate_cv_structured(data, "Jane Doe")
+        assert any("contact" in w.lower() for w in warnings)
+
+    def test_placeholder_in_bullets(self):
+        from guardrails import validate_cv_structured
+        data = {**self.GOOD_CV_DATA}
+        data["experience"] = [{
+            "title": "PM", "company": "Acme", "location": "Berlin",
+            "dates": "2022 -- 2025", "bullets": ["[Insert achievement here]"],
+        }]
+        warnings = validate_cv_structured(data, "Jane Doe")
+        assert any("placeholder" in w.lower() for w in warnings)
+
+    def test_empty_data(self):
+        from guardrails import validate_cv_structured
+        assert len(validate_cv_structured({}, "Jane Doe")) > 0
+        assert len(validate_cv_structured(None, "Jane Doe")) > 0
