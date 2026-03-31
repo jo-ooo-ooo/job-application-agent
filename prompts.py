@@ -207,20 +207,63 @@ ROLE CONTEXT:
 SELECTED EXPERIENCE:
 {project_selection}
 
-Read cvs/template_standard.md for the format.
+Read cvs/template_standard.md for the candidate's contact info.
+Read cvs/projects_master_list.md for the full experience and side projects (including GitHub links).
 
 Rules:
 - Think like the hiring manager: what would make them say "this person gets it"?
-- Fill the template with selected experience, reframed in the language the hiring team uses
+- Fill the structure with selected experience, reframed in the language the hiring team uses
 - Mirror keywords from the JD naturally (ATS optimization)
 - FOCUS on the two most recent roles — give them the most space and strongest bullets
-- Earlier roles: 1-2 lines max, only if they fill a specific gap
+- Earlier roles: 1-2 bullets max, only if they fill a specific gap
 - Each bullet: Action + Result + Impact (quantify where possible)
-- Target length: 1 page ideal, 1.5 pages maximum
-- Standard headings, no tables/columns, clean markdown
 - Pick the bullet-point version (General/Strategic/0-to-1) that best matches this role
+- For side projects: select 2-4 that best demonstrate relevant skills for this role
+- Include the GitHub URL for each side project from the master list
+- Target: 1 page. Keep bullet counts tight.
+- For LaTeX compatibility: use -- for en-dashes in date ranges (e.g., "Sep 2022 -- Oct 2025")
+- Do NOT escape special characters like &, %, $ — the system handles that automatically
 
-Output ONLY the final CV markdown. No commentary.
+Output ONLY valid JSON in this exact structure (no commentary, no markdown):
+
+{{
+  "name": "Candidate Name",
+  "email": "email@example.com",
+  "phone": "+49 123 456",
+  "linkedin": "https://linkedin.com/in/username",
+  "location": "City, Country",
+  "title_tagline": "One-line positioning statement tailored to this role",
+  "skills": {{
+    "Category Name": ["skill1", "skill2", "skill3"],
+    "Another Category": ["skill4", "skill5"]
+  }},
+  "experience": [
+    {{
+      "title": "Role Title",
+      "company": "Company Name",
+      "location": "City, Country",
+      "dates": "Mon YYYY -- Mon YYYY",
+      "company_description": "One-line company description (optional)",
+      "bullets": [
+        "Action + Result + Impact bullet",
+        "Another bullet"
+      ]
+    }}
+  ],
+  "side_projects": [
+    {{
+      "name": "Descriptive Project Name",
+      "github_url": "https://github.com/user/repo",
+      "bullets": [
+        "What it does and why it matters"
+      ]
+    }}
+  ],
+  "education": {{
+    "degree": "Degree Name",
+    "university": "University Name"
+  }}
+}}
 """
 
 STEP_COVER_LETTER = """\
@@ -258,8 +301,8 @@ JOB DESCRIPTION:
 ROLE ANALYSIS:
 {role_analysis}
 
-CV:
-{cv_markdown}
+CV (structured data — review the content, not the format):
+{cv_display}
 
 COVER LETTER:
 {cover_letter_markdown}
@@ -296,21 +339,23 @@ JOB DESCRIPTION:
 {job_description}
 
 CURRENT CV:
-{cv_markdown}
+{cv_json}
 
 CURRENT COVER LETTER:
 {cover_letter_markdown}
 
-Fix ALL listed issues. Output both revised documents as markdown.
+Fix ALL listed issues. Output both revised documents.
 
 OUTPUT FORMAT (follow exactly):
 ## REVISED CV
-[full CV markdown here]
+[Output the full CV as valid JSON in the same structure as the input — no commentary]
 
 ## REVISED COVER LETTER
 [full cover letter markdown here]
 
 Rules: Never invent new experience. Only address the specific issues listed.
+For LaTeX compatibility: use -- for en-dashes in date ranges.
+Do NOT escape special characters like &, %, $ — the system handles that automatically.
 """
 
 STEP_REVISION = """\
@@ -322,25 +367,17 @@ JOB DESCRIPTION:
 {job_description}
 
 CURRENT CV:
-{cv_markdown}
+{cv_json}
 
 CURRENT COVER LETTER:
 {cover_letter_markdown}
 
-Rules: Never invent new experience. Output both revised documents as markdown,
-separated by a clear "---" and headers.
-"""
+Rules: Never invent new experience. Output both revised documents.
 
-STEP_PDF_GENERATION = """\
-Generate PDFs for the final CV and cover letter.
+OUTPUT FORMAT:
+## REVISED CV
+[full CV as valid JSON — same structure as input]
 
-Use the generate_pdf tool twice:
-1. generate_pdf(content=<cv markdown>, filename="cv.pdf")
-2. generate_pdf(content=<cover letter markdown>, filename="cover_letter.pdf")
-
-CV MARKDOWN:
-{cv_markdown}
-
-COVER LETTER MARKDOWN:
-{cover_letter_markdown}
+## REVISED COVER LETTER
+[full cover letter markdown]
 """
