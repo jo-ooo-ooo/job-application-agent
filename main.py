@@ -414,10 +414,20 @@ def main():
             state["cv_markdown"] = revised_cv
         state["cover_letter_markdown"] = _extract_section(fix_result, "Cover Letter", state["cover_letter_markdown"])
 
+    # ── Save preview files for review ────────────────────────
+    output_dir = PROJECT_DIR / "output"
+    output_dir.mkdir(exist_ok=True)
+    if state.get("cv_json"):
+        (output_dir / "cv_preview.json").write_text(state["cv_json"], encoding="utf-8")
+    else:
+        (output_dir / "cv_preview.md").write_text(state.get("cv_markdown", ""), encoding="utf-8")
+    (output_dir / "cover_letter_preview.md").write_text(state["cover_letter_markdown"], encoding="utf-8")
+
     # ── STOP Gate 2 ───────────────────────────────────────────
     while True:
         print("\n" + "=" * 60)
-        print("STOP GATE: Review CV and cover letter above.")
+        print("STOP GATE: Review CV and cover letter.")
+        print(f"  Preview files saved to: {output_dir}/")
         print("=" * 60)
         print("Options: (a)pprove  (r)evise  (q)uit")
         choice = input("Your choice: ").strip().lower()

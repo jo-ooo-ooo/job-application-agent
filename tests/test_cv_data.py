@@ -94,6 +94,18 @@ class TestParseCvJson:
         cv = parse_cv_json(raw)
         assert cv.name == "Joyce Chen"
 
+    def test_parses_json_with_trailing_junk(self):
+        """LLMs sometimes add --- or commentary after the JSON."""
+        raw = '```json\n{"name": "Joyce Chen", "email": "a@b.com", "phone": "+1", "location": "Berlin", "title_tagline": "PM", "skills": {}, "experience": [], "education": {"degree": "BA", "university": "U"}}\n```\n\n---\n'
+        cv = parse_cv_json(raw)
+        assert cv.name == "Joyce Chen"
+
+    def test_parses_json_with_leading_text(self):
+        """LLMs sometimes add commentary before the JSON."""
+        raw = 'Here is the CV:\n\n{"name": "Joyce Chen", "email": "a@b.com", "phone": "+1", "location": "Berlin", "title_tagline": "PM", "skills": {}, "experience": [], "education": {"degree": "BA", "university": "U"}}'
+        cv = parse_cv_json(raw)
+        assert cv.name == "Joyce Chen"
+
     def test_invalid_json_raises(self):
         with pytest.raises(ValueError, match="Failed to parse"):
             parse_cv_json("This is not JSON at all")
