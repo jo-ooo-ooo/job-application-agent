@@ -106,6 +106,48 @@ def render_cv_latex(cv: CVData) -> str:
     )
 
 
+def _markdown_body_to_latex(body: str) -> str:
+    """Convert a markdown cover letter body to LaTeX.
+
+    Handles: **bold**, *italic*, ---, and paragraph breaks.
+    """
+    # Strip leading header block (name, email, --- etc.) that LLMs sometimes add
+    lines = body.split('\n')
+    body_lines = []
+    in_header = True
+    for line in lines:
+        stripped = line.strip()
+        if in_header:
+            # Skip header-like lines: bold name, email, ---, empty lines
+            if stripped.startswith('**') and stripped.endswith('**'):
+                continue
+            if '@' in stripped and '|' in stripped:
+                continue
+            if stripped == '---' or stripped == '':
+                continue
+            if stripped.startswith('Hiring') or stripped.startswith('Dear'):
+                in_header = False
+            else:
+                in_header = False
+        body_lines.append(line)
+
+    body = '\n'.join(body_lines)
+
+    # Escape LaTeX special chars first
+    body = escape_latex(body)
+
+    # Convert markdown bold **text** to \textbf{text}
+    body = re.sub(r'\*\*(.+?)\*\*', r'\\textbf{\1}', body)
+    # Convert markdown italic *text* to \textit{text}
+    body = re.sub(r'\*(.+?)\*', r'\\textit{\1}', body)
+    # Remove horizontal rules
+    body = re.sub(r'^---+\s*$', '', body, flags=re.MULTILINE)
+    # Convert double newlines to paragraph breaks
+    body = re.sub(r'\n\n+', '\n\n', body)
+
+    return body.strip()
+
+
 def render_cover_letter_latex(
     name: str, email: str, phone: str, location: str, body: str,
 ) -> str:
@@ -117,7 +159,7 @@ def render_cover_letter_latex(
         email=email,
         phone=escape_latex(phone),
         location=escape_latex(location),
-        body=escape_latex(body),
+        body=_markdown_body_to_latex(body),
     )
 
 
