@@ -33,10 +33,10 @@ class TestCVData:
             ],
             "side_projects": [
                 {
-                    "name": "Film Festival Schedule Planner",
-                    "github_url": "https://github.com/user/plannale",
+                    "name": "Recipe Organiser",
+                    "github_url": "https://github.com/user/recipe-organiser",
                     "bullets": [
-                        "Built a Chrome extension for optimizing festival schedules",
+                        "Built a Chrome extension for saving and organising recipes",
                     ],
                 },
             ],
@@ -51,7 +51,7 @@ class TestCVData:
         assert len(cv.experience) == 1
         assert cv.experience[0].company == "Acme Corp"
         assert len(cv.side_projects) == 1
-        assert cv.side_projects[0].github_url == "https://github.com/user/plannale"
+        assert cv.side_projects[0].github_url == "https://github.com/user/recipe-organiser"
         assert cv.education["degree"] == "BA in Advertising"
 
     def test_from_dict_missing_optional_fields(self):
