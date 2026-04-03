@@ -125,8 +125,6 @@ The first version of CV construction asked the model to output markdown. That wo
 
 The fix was to change the output contract entirely. The model now outputs JSON matching a `CVData` dataclass. That JSON gets rendered into a LaTeX template via Jinja2, then compiled with `pdflatex` to produce a properly typeset PDF. Separation of concerns: the model handles content selection and framing, the template handles layout.
 
-The tradeoff: the model now has a stricter output contract, which means more ways to fail. Robust JSON parsing (brace-matching fallback, code fence stripping) handles the common LLM output quirks.
-
 ---
 
 ## Hallucination has multiple failure modes — vague instructions don't fix them
@@ -137,13 +135,7 @@ During testing, the model hallucinated in two distinct places that required diff
 
 **Experience hallucination** — More dangerous. During the critic revision loop, when asked to revise the CV JSON, the model invented an entire fake company — a plausible-sounding one that fit the candidate's background, but one they never worked at. It replaced a real company that was absent from the model's context at the time.
 
-The key lesson: **"never invent" as an instruction doesn't work**. The model interprets it as "don't make things up from thin air" — but it will confidently fill gaps with plausible-sounding content when the real information is absent. What works is enumerating the allowed set explicitly in the prompt: name the exact companies that may appear, and state that anything else is a hallucination. The model respects a closed list far better than an open-ended prohibition.
-
 The same pattern applies to skills, dates, and any other structured field where the space of valid values is bounded.
-
----
-
-## "Never invent" isn't enough — you need a closed allowed set, injected at every step
 
 The first version of hallucination prevention added rules like "never invent companies" and "only use skills from the master list." These didn't work. The model follows the instruction directionally but still fills gaps with plausible content when the real information is absent from its context.
 
@@ -154,16 +146,6 @@ Two things actually work:
 **2. Validate deterministically after generation.** After the model produces CV JSON, a post-generation check compares every company, title, date, project name, GitHub URL, and skill token against the scaffold. Any mismatch triggers an auto-fix, with the scaffold re-injected so the model has the correct values in front of it.
 
 The key insight: LLMs are bad at "don't do X" and good at "here is the exact value, copy it." Structured injection + deterministic validation is more reliable than prompt engineering alone.
-
----
-
-## Hallucination can come from a different step than where it appears
-
-The scaffold injection fixes CV construction, but the same problem can appear upstream. In the `project_selection` step — which runs before CV construction — the model was recommending to "skip" certain roles based on relevance, and hallucinating a company name in the skip list that didn't exist in the master list.
-
-The fix: inject the canonical company list into `project_selection` too, and change the framing. The prompt now tells the model its job is to select *which bullets and versions to use* — every company will appear in the CV regardless. Separating "which content" from "whether to include" removes the opportunity for the model to make inclusion decisions it shouldn't be making.
-
-The general lesson: when hallucinations appear in step N, check whether they were seeded in step N-1.
 
 ---
 
