@@ -119,11 +119,69 @@ The implementation is simple — save the state dict to JSON after every step, l
 
 ---
 
+## Structured output is the right abstraction for document generation
+
+The first version of CV construction asked the model to output markdown. That worked for display, but PDF generation was a problem: `fpdf2` rendered plain text with no formatting, the output looked amateur, and getting the model to produce well-structured markdown consistently was fragile.
+
+The fix was to change the output contract entirely. The model now outputs JSON matching a `CVData` dataclass. That JSON gets rendered into a LaTeX template via Jinja2, then compiled with `pdflatex` to produce a properly typeset PDF. Separation of concerns: the model handles content selection and framing, the template handles layout.
+
+The tradeoff: the model now has a stricter output contract, which means more ways to fail. Robust JSON parsing (brace-matching fallback, code fence stripping) handles the common LLM output quirks.
+
+---
+
+## Hallucination has multiple failure modes — vague instructions don't fix them
+
+During testing, the model hallucinated in two distinct places that required different fixes:
+
+**Skills hallucination** — The model invented plausible-sounding skills not in the master list: `contribution margin analysis`, `predictive modelling`, `content ranking & recommendation algorithms`. These sound reasonable for a PM profile, which is exactly why they're dangerous. The fix was to add an explicit rule referencing the Skills section of the master list — but that still wasn't enough on its own.
+
+**Experience hallucination** — More dangerous. During the critic revision loop, when asked to revise the CV JSON, the model invented an entire fake company — a plausible-sounding one that fit the candidate's background, but one they never worked at. It replaced a real company that was absent from the model's context at the time.
+
+The key lesson: **"never invent" as an instruction doesn't work**. The model interprets it as "don't make things up from thin air" — but it will confidently fill gaps with plausible-sounding content when the real information is absent. What works is enumerating the allowed set explicitly in the prompt: name the exact companies that may appear, and state that anything else is a hallucination. The model respects a closed list far better than an open-ended prohibition.
+
+The same pattern applies to skills, dates, and any other structured field where the space of valid values is bounded.
+
+---
+
+## "Never invent" isn't enough — you need a closed allowed set, injected at every step
+
+The first version of hallucination prevention added rules like "never invent companies" and "only use skills from the master list." These didn't work. The model follows the instruction directionally but still fills gaps with plausible content when the real information is absent from its context.
+
+Two things actually work:
+
+**1. Inject the allowed set explicitly as structured data.** The CV scaffold parses the master list into a `CVScaffold` object — company names, titles, dates, locations, project URLs, skill tokens — and serialises it as JSON directly into the prompt. The model is told: "copy these fields exactly." This is fundamentally different from "don't invent": instead of an open-ended prohibition, the model has a closed list to copy from.
+
+**2. Validate deterministically after generation.** After the model produces CV JSON, a post-generation check compares every company, title, date, project name, GitHub URL, and skill token against the scaffold. Any mismatch triggers an auto-fix, with the scaffold re-injected so the model has the correct values in front of it.
+
+The key insight: LLMs are bad at "don't do X" and good at "here is the exact value, copy it." Structured injection + deterministic validation is more reliable than prompt engineering alone.
+
+---
+
+## Hallucination can come from a different step than where it appears
+
+The scaffold injection fixes CV construction, but the same problem can appear upstream. In the `project_selection` step — which runs before CV construction — the model was recommending to "skip" certain roles based on relevance, and hallucinating a company name in the skip list that didn't exist in the master list.
+
+The fix: inject the canonical company list into `project_selection` too, and change the framing. The prompt now tells the model its job is to select *which bullets and versions to use* — every company will appear in the CV regardless. Separating "which content" from "whether to include" removes the opportunity for the model to make inclusion decisions it shouldn't be making.
+
+The general lesson: when hallucinations appear in step N, check whether they were seeded in step N-1.
+
+---
+
+## Append-only master list updates prevent silent truncation
+
+The gap update step originally asked the model to output the entire master list with new content added inline. For a 25k-character file, the model sometimes truncated the output — silently dropping the tail of the file. There was no error, no warning; content just disappeared.
+
+The fix: the model only outputs the *new lines to add*. The code reads the existing file, appends the new block to a `## Candidate Clarifications` section, and writes back. The original content is never touched. This also makes the additions easy to inspect — they're in one dedicated section rather than scattered through the file.
+
+The general lesson: never ask a model to rewrite a large file. Rewrite outputs are both expensive and fragile. Append-only is safer, cheaper, and easier to audit.
+
+---
+
 ## What's next
 
-V2 is complete: multi-agent workflow (parallel research, writer/critic loop), MCP integration, observability improvements, expanded evaluation.
+V4 (CV scaffold + hallucination prevention) is complete.
 
-V3 directions:
+V5 directions:
 - **Interview prep agent** — deep research on interviewer, product, culture, and company strategy. Triggered when you get an interview invite and know the hiring manager's name.
 - **Multi-model routing** — use Haiku for cheap steps, Sonnet for core writing, Opus for complex analysis.
 - **Batch processing** — run against a saved jobs list from a spreadsheet.

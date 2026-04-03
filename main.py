@@ -28,6 +28,7 @@ from scoring import (
     format_score_summary,
 )
 from cv_data import parse_cv_json
+from cv_scaffold import parse_scaffold
 from latex_generator import generate_cv_pdf, generate_cover_letter_pdf
 from prompts import (
     SYSTEM_PROMPT,
@@ -46,6 +47,7 @@ from mcp_client import SheetsClient
 from guardrails import (
     validate_cv,
     validate_cv_structured,
+    validate_cv_against_scaffold,
     validate_cover_letter,
     validate_gap_analysis,
     extract_candidate_name,
@@ -126,6 +128,16 @@ def main():
 
     # Extract candidate name from template for guardrail checks
     candidate_name = extract_candidate_name(template_path.read_text(encoding="utf-8"))
+
+    # Parse CV scaffold (fixed facts: companies, dates, projects, skills inventory)
+    try:
+        scaffold = parse_scaffold(master_list_path.read_text(encoding="utf-8"))
+        print(f"  [scaffold] {len(scaffold.experience_skeletons)} roles, "
+              f"{len(scaffold.side_project_refs)} projects, "
+              f"{len(scaffold.skills_inventory)} skill tokens")
+    except ValueError as e:
+        print(f"  [scaffold] Warning: could not parse scaffold — {e}")
+        scaffold = None
 
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
@@ -283,12 +295,17 @@ def main():
     if "project_selection" not in completed_steps:
         print("\n[Step 3/6] Selecting best-fit projects...")
         metrics = logger.start_step("project_selection")
+        scaffold_companies = (
+            "\n".join(f"- {s.company} ({s.title})" for s in scaffold.experience_skeletons)
+            if scaffold else "(scaffold unavailable — include all companies from master list)"
+        )
         state["project_selection"] = run_step(
             client, SYSTEM_PROMPT,
             STEP_PROJECT_SELECTION.format(
                 job_description=state["job_description"],
                 company_research=state["company_research"],
                 gap_analysis=state["gap_analysis"],
+                scaffold_companies=scaffold_companies,
             ),
             metrics=metrics, step_name="project_selection",
         )
@@ -303,12 +320,32 @@ def main():
     if "cv_construction" not in completed_steps:
         print("\n[Step 4/6] Constructing tailored CV...")
         metrics = logger.start_step("cv_construction")
+
+        # Build scaffold JSON for prompt injection
+        if scaffold is not None:
+            scaffold_data = {
+                "experience_skeletons": [
+                    {"title": s.title, "company": s.company,
+                     "location": s.location, "dates": s.dates}
+                    for s in scaffold.experience_skeletons
+                ],
+                "side_project_refs": [
+                    {"name": r.name, "github_url": r.github_url}
+                    for r in scaffold.side_project_refs
+                ],
+                "skills_inventory": sorted(scaffold.skills_inventory),
+            }
+            scaffold_json = _json.dumps(scaffold_data, ensure_ascii=False, indent=2)
+        else:
+            scaffold_json = "{}"
+
         raw_cv = run_step(
             client, SYSTEM_PROMPT,
             STEP_CV_CONSTRUCTION.format(
                 job_description=state["job_description"],
                 company_research=state["company_research"],
                 project_selection=state["project_selection"],
+                scaffold_json=scaffold_json,
             ),
             metrics=metrics, step_name="cv_construction",
             exclude_tools=["generate_pdf"],
@@ -383,6 +420,9 @@ def main():
         try:
             cv_dict = _json.loads(state["cv_json"])
             cv_warnings = validate_cv_structured(cv_dict, candidate_name)
+            # Scaffold validation: deterministic check of frozen facts
+            if scaffold is not None:
+                cv_warnings += validate_cv_against_scaffold(cv_dict, scaffold)
         except _json.JSONDecodeError:
             cv_warnings = ["CV JSON is malformed after critic loop."]
     else:
@@ -396,11 +436,29 @@ def main():
         print("  [guardrail] Structural issues detected. Asking the model to fix...")
         metrics = logger.start_step("guardrail_fix")
         cv_for_fix = state.get("cv_json") or state.get("cv_markdown", "")
+        feedback_lines = (
+            [f"- CV: {w}" for w in cv_warnings] +
+            [f"- Cover Letter: {w}" for w in cl_warnings]
+        )
+        # Inject scaffold frozen facts so the model knows exact title/company/location/dates
+        # for any missing roles — without this it may still omit them or hallucinate fields.
+        scaffold_hint = ""
+        if scaffold is not None:
+            scaffold_hint = (
+                "\n\nCV SCAFFOLD — FROZEN FACTS (use these exact values when adding missing roles):\n"
+                + _json.dumps({
+                    "experience_skeletons": [
+                        {"title": s.title, "company": s.company, "location": s.location, "dates": s.dates}
+                        for s in scaffold.experience_skeletons
+                    ],
+                    "side_project_refs": [
+                        {"name": r.name, "github_url": r.github_url}
+                        for r in scaffold.side_project_refs
+                    ],
+                }, ensure_ascii=False, indent=2)
+            )
         fix_prompt = STEP_REVISION.format(
-            feedback="Fix these structural issues:\n" + "\n".join(
-                [f"- CV: {w}" for w in cv_warnings] +
-                [f"- Cover Letter: {w}" for w in cl_warnings]
-            ),
+            feedback="Fix these structural issues:\n" + "\n".join(feedback_lines) + scaffold_hint,
             job_description=state["job_description"],
             cv_json=cv_for_fix,
             cover_letter_markdown=state["cover_letter_markdown"],
@@ -473,8 +531,10 @@ def main():
     output_dir = PROJECT_DIR / "output"
     output_dir.mkdir(exist_ok=True)
 
-    cv_path = output_dir / "cv.pdf"
-    cl_path = output_dir / "cover_letter.pdf"
+    # Build descriptive filenames: Candidate_Name_CV_CompanyName_RoleAbbrev.pdf
+    cv_filename, cl_filename = _build_pdf_filenames(candidate_name, state)
+    cv_path = output_dir / cv_filename
+    cl_path = output_dir / cl_filename
 
     # CV: use LaTeX if structured JSON available, fall back to fpdf2
     if state.get("cv_json"):
@@ -623,25 +683,30 @@ def _handle_gap_questions(client, state, master_list_path, logger=None):
 
     answers_text = "\n\n".join(answers)
 
-    # Use the LLM to update the master list
+    # Use the LLM to generate only the new content to append
     print("\nUpdating master list with your answers...")
     metrics = logger.start_step("gap_update") if logger else None
-    current_content = master_list_path.read_text(encoding="utf-8")
-    updated_content = run_step(
+    new_content = run_step(
         client, SYSTEM_PROMPT,
-        STEP_GAP_UPDATE.format(
-            user_answers=answers_text,
-            master_list_content=current_content,
-        ),
+        STEP_GAP_UPDATE.format(user_answers=answers_text),
         metrics=metrics, step_name="gap_update",
     )
     if logger:
         logger.finish_step()
 
-    # Only write if the content actually changed
-    if updated_content.strip() != current_content.strip() and len(updated_content.strip()) > 100:
-        master_list_path.write_text(updated_content, encoding="utf-8")
-        print("Master list updated with new experience.")
+    # Append to a dedicated section — never rewrite the file
+    new_content = new_content.strip()
+    if new_content and new_content != "NO_UPDATE":
+        current = master_list_path.read_text(encoding="utf-8")
+        clarifications_header = "## Candidate Clarifications"
+        if clarifications_header not in current:
+            # First addition: create the section
+            append_block = f"\n\n---\n\n{clarifications_header}\n\n{new_content}\n"
+        else:
+            # Section already exists: append below it
+            append_block = f"\n{new_content}\n"
+        master_list_path.write_text(current + append_block, encoding="utf-8")
+        print("Master list updated (appended to Candidate Clarifications).")
     else:
         print("No updates needed.")
 
@@ -761,6 +826,64 @@ def _extract_questions(gap_text: str) -> list[str]:
                 questions.append(q)
 
     return questions
+
+
+def _build_pdf_filenames(candidate_name: str, state: dict) -> tuple[str, str]:
+    """Build descriptive PDF filenames like Candidate_Name_CV_Company_Role.pdf."""
+    import re
+
+    name_part = candidate_name.replace(" ", "_")
+    company = ""
+    role_abbrev = ""
+
+    job = state.get("job_description", "")
+    research = state.get("company_research", "")
+
+    # ── Company name ──────────────────────────────────────────────────────────
+    # Best source: company_research — the model always writes "- Company: Name, ..."
+    # which is the most reliable signal for the target company.
+    m = re.search(r'[-*]\s*Company:\s*\[?([A-Za-z0-9][A-Za-z0-9 .&\'-]{1,40}?)(?:[,\[\]]|$)', research)
+    if m:
+        company = m.group(1).strip()
+
+    # Fallback: role_analysis header "CompanyName — Role Title" pattern
+    if not company:
+        role_analysis = state.get("role_analysis", "")
+        m = re.search(r'(?:##|###)\s*[^—\n]+?—\s*([A-Z][A-Za-z0-9 .&\'-]{1,40}?)\s*\n', role_analysis)
+        if m:
+            company = m.group(1).strip()
+
+    # ── Role abbreviation ─────────────────────────────────────────────────────
+    role_map = {
+        "senior product manager": "SPM",
+        "product manager": "PM",
+        "senior pm": "SPM",
+        "head of product": "HoP",
+        "director of product": "DoP",
+        "vp of product": "VPP",
+        "chief product officer": "CPO",
+        "group product manager": "GPM",
+        "principal product manager": "PPM",
+        "staff product manager": "StaffPM",
+        "product lead": "PL",
+        "product owner": "PO",
+    }
+    job_lower = job.lower()
+    for role_title, abbrev in sorted(role_map.items(), key=lambda x: -len(x[0])):
+        if role_title in job_lower:
+            role_abbrev = abbrev
+            break
+
+    # ── Clean up ──────────────────────────────────────────────────────────────
+    company = re.sub(r'[^\w\s]', '', company).strip().replace(" ", "_")
+    if not company:
+        company = "Company"
+    if not role_abbrev:
+        role_abbrev = "PM"
+
+    cv_name = f"{name_part}_CV_{company}_{role_abbrev}.pdf"
+    cl_name = f"{name_part}_Cover_Letter_{company}_{role_abbrev}.pdf"
+    return cv_name, cl_name
 
 
 def _strip_code_fences(text: str) -> str:

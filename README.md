@@ -14,15 +14,15 @@ Input: job description (URL, file, or text)
 Step 1: Company research + Role analysis  [parallel agents]
 Step 2: Gap analysis — scores fit across 5 dimensions, asks questions
 Step 3: Project selection — picks best-fit experience from master list
-Step 4: CV construction — tailored, ATS-optimized markdown
+Step 4: CV construction — tailored, structured JSON (CVData)
 Step 5: Cover letter — specific to company, addresses gaps honestly
          |
      Critic review loop  [writer/critic agents, up to 3 rounds]
      Guardrail auto-fix  [structural validation + model fix]
          |
-Step 6: PDF generation
+Step 6: PDF generation  [LaTeX via pdflatex, fpdf2 fallback]
          |
-Output: cv.pdf + cover_letter.pdf + Google Sheets log
+Output: Candidate_Name_CV_Company_Role.pdf + Candidate_Name_Cover_Letter_Company_Role.pdf + Google Sheets log
 ```
 
 Two human gates: after gap analysis (proceed?), and after seeing the CV/cover letter (approve, revise, or quit).
@@ -52,12 +52,19 @@ Two human gates: after gap analysis (proceed?), and after seeing the CV/cover le
 - Full run logs saved as JSON in `logs/`
 - Google Sheets integration via MCP for application tracking
 
+### PDF generation
+
+CV and cover letter are generated as LaTeX PDFs using Jake's Resume template (sb2nov/resume, MIT). The agent outputs structured JSON (`CVData` dataclass), which is rendered via Jinja2 into `.tex` files and compiled with `pdflatex`. Falls back to `fpdf2` if LaTeX compilation fails. Output filenames include candidate name, company, and role abbreviation: `Candidate_Name_CV_Company_Role.pdf`.
+
+Requires TexLive: `brew install --cask mactex-no-gui`
+
 ### Guardrails
 
 - Runtime validation on CV (name, word count, headers, contact info, placeholders)
 - Cover letter validation (length, name, generic phrases)
 - Gap analysis validation (scoring dimensions present)
 - Auto-fix: if guardrails fail after critic loop, model is asked to fix specific issues
+- **CV scaffold system**: fixed facts (company names, titles, dates, locations, project URLs, skill inventory) are parsed from the master list and injected into the CV construction prompt as structured JSON. The model must copy these fields exactly. A deterministic post-generation check validates every field — any mismatch triggers an auto-fix with the scaffold facts re-injected.
 
 ### Evaluation
 
@@ -127,18 +134,21 @@ agent.py             Core agent loop — stateless steps, retry logic, tool exec
 agents.py            Multi-agent coordination — parallel research, critic loop
 prompts.py           All step prompts with {placeholders} for state injection
 scoring.py           Decomposed scoring — parse dimensions, compute weighted total
-guardrails.py        Runtime validation + auto-fix
+guardrails.py        Runtime validation + scaffold validation + auto-fix
+cv_scaffold.py       Parse master list into frozen facts (companies, projects, skills)
 run_logger.py        Per-step metrics (tokens, cost, latency, tools, retries)
 checkpoint.py        Save/load pipeline state for resume
 tools.py             Tool definitions (web_search, read_file, generate_pdf)
-pdf_generator.py     Markdown to PDF via fpdf2
+cv_data.py           Structured CV data model (CVData, Experience, SideProject dataclasses)
+latex_generator.py   LaTeX PDF generation — Jinja2 rendering + pdflatex compilation
+pdf_generator.py     Markdown to PDF via fpdf2 (fallback)
 mcp_client.py        MCP client for Google Sheets integration
 sheets_mcp_server.py MCP server — exposes append_row tool
 
-tests/               Unit tests (109 tests)
+templates/           LaTeX templates for CV and cover letter (Jake's Resume base)
+tests/               Unit tests (184 tests)
 eval/                Evaluation framework — automated checks + LLM-as-judge
 examples/            Example CV templates for setup
-docs/                Architecture plans
 ```
 
 ---
@@ -146,7 +156,8 @@ docs/                Architecture plans
 ## Requirements
 
 - Python 3.10+
-- `anthropic`, `fpdf2`, `requests`, `beautifulsoup4`, `python-dotenv`, `markdown`
+- `anthropic`, `fpdf2`, `jinja2`, `requests`, `beautifulsoup4`, `python-dotenv`, `markdown`
 - Anthropic API key
+- TexLive for LaTeX PDF generation: `brew install --cask mactex-no-gui`
 - Brave Search API key (optional)
 - Google Cloud credentials (optional, for Sheets logging)

@@ -3,30 +3,26 @@
 %-------------------------
 \documentclass[a4paper,11pt]{article}
 
-\usepackage{latexsym}
-\usepackage[empty]{fullpage}
+\usepackage[a4paper,left=0.5in,right=0.5in,top=0.5in,bottom=0.5in]{geometry}
 \usepackage{titlesec}
 \usepackage{marvosym}
 \usepackage[usenames,dvipsnames]{color}
 \usepackage{verbatim}
 \usepackage{enumitem}
-\usepackage[hidelinks]{hyperref}
+\usepackage[colorlinks=true, urlcolor=RoyalBlue, linkcolor=RoyalBlue]{hyperref}
 \usepackage{fancyhdr}
 \usepackage[english]{babel}
 \usepackage{tabularx}
+
+% Font: Source Sans Pro — clean, modern, readable
+\usepackage[default]{sourcesanspro}
+\usepackage[T1]{fontenc}
 
 \pagestyle{fancy}
 \fancyhf{}
 \fancyfoot{}
 \renewcommand{\headrulewidth}{0pt}
 \renewcommand{\footrulewidth}{0pt}
-
-% Adjust margins
-\addtolength{\oddsidemargin}{-0.5in}
-\addtolength{\evensidemargin}{-0.5in}
-\addtolength{\textwidth}{1in}
-\addtolength{\topmargin}{-.5in}
-\addtolength{\textheight}{1.0in}
 
 \urlstyle{same}
 \raggedbottom
@@ -35,7 +31,7 @@
 
 % Section formatting
 \titleformat{\section}{
-  \vspace{-4pt}\scshape\raggedright\large
+  \vspace{-4pt}\bfseries\raggedright\large
 }{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
 
 % Custom commands
@@ -45,7 +41,7 @@
 
 \newcommand{\resumeSubheading}[4]{
   \vspace{-2pt}\item
-    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+    \begin{tabular*}{\linewidth}[t]{l@{\extracolsep{\fill}}r}
       \textbf{#1} & #2 \\
       \textit{\small#3} & \textit{\small #4} \\
     \end{tabular*}\vspace{-7pt}
@@ -53,7 +49,7 @@
 
 \newcommand{\resumeProjectHeading}[2]{
   \vspace{-2pt}\item
-    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+    \begin{tabular*}{\linewidth}[t]{l@{\extracolsep{\fill}}r}
       \textbf{#1} & \small #2 \\
     \end{tabular*}\vspace{-7pt}
 }
@@ -69,15 +65,17 @@
 
 %----------HEADING----------
 \begin{center}
-    \textbf{\Huge \scshape <<name>>} \\ \vspace{1pt}
-    \small <<phone>> $|$ \href{mailto:<<email>>}{<<email>>}<% if linkedin %> $|$ \href{<<linkedin>>}{LinkedIn}<% endif %><% if location %> $|$ <<location>><% endif %>
+    \textbf{\Huge <<name>>} \\[4pt]
+    \small <<phone>> $|$ \href{mailto:<<email>>}{<<email>>}<% if linkedin %> $|$ \href{<<linkedin>>}{LinkedIn}<% endif %><% if location %> $|$ <<location>><% endif %> \\[2pt]
+<% if title_tagline %>
+    \small\textit{<<title_tagline>>}<% if education %> \\[2pt]
+    \small\textit{<<education.degree>>, <<education.university>>}<% endif %>
+<% elif education %>
+    \small\textit{<<education.degree>>, <<education.university>>}
+<% endif %>
 \end{center}
 
-<% if title_tagline %>
-\vspace{-10pt}
-\begin{center}\small <<title_tagline>>\end{center}
-\vspace{-5pt}
-<% endif %>
+\vspace{-6pt}
 
 %-----------SKILLS-----------
 <% if skills %>
@@ -91,30 +89,13 @@
  \end{itemize}
 <% endif %>
 
-%-----------EXPERIENCE-----------
-<% if experience %>
-\section{Experience}
-  \resumeSubHeadingListStart
-<% for exp in experience %>
-    \resumeSubheading
-      {<<exp.title>>}{<<exp.dates>>}
-      {<<exp.company>><% if exp.company_description %> -- <<exp.company_description>><% endif %>}{<<exp.location>>}
-      \resumeItemListStart
-<% for bullet in exp.bullets %>
-        \resumeItem{<<bullet>>}
-<% endfor %>
-      \resumeItemListEnd
-<% endfor %>
-  \resumeSubHeadingListEnd
-<% endif %>
-
 %-----------PROJECTS-----------
 <% if side_projects %>
 \section{Projects}
   \resumeSubHeadingListStart
 <% for proj in side_projects %>
     \resumeProjectHeading
-      {<<proj.name>><% if proj.github_url %> $|$ \href{<<proj.github_url>>}{\underline{GitHub}}<% endif %>}{}
+      {<<proj.name>><% if proj.github_url %> $|$ \href{<<proj.github_url>>}{GitHub}<% endif %>}{}
       \resumeItemListStart
 <% for bullet in proj.bullets %>
         \resumeItem{<<bullet>>}
@@ -124,13 +105,23 @@
   \resumeSubHeadingListEnd
 <% endif %>
 
-%-----------EDUCATION-----------
-<% if education %>
-\section{Education}
+%-----------EXPERIENCE-----------
+<% if experience %>
+\section{Experience}
   \resumeSubHeadingListStart
+<% for exp in experience %>
     \resumeSubheading
-      {<<education.university>>}{}
-      {<<education.degree>>}{}
+      {<<exp.title>>}{<<exp.dates>>}
+      {<<exp.company>>}{<<exp.location>>}
+<% if exp.company_description %>
+      \vspace{1pt}{\small\textit{<<exp.company_description>>}}\vspace{-5pt}
+<% endif %>
+      \resumeItemListStart
+<% for bullet in exp.bullets %>
+        \resumeItem{<<bullet>>}
+<% endfor %>
+      \resumeItemListEnd
+<% endfor %>
   \resumeSubHeadingListEnd
 <% endif %>
 

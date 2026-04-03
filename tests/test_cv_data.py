@@ -8,10 +8,10 @@ from cv_data import CVData, Experience, SideProject, parse_cv_json
 class TestCVData:
     def test_from_dict_complete(self):
         data = {
-            "name": "Joyce Chen",
-            "email": "ytchen37@gmail.com",
-            "phone": "+49 160 4629745",
-            "linkedin": "https://www.linkedin.com/in/yuntzuchen/",
+            "name": "Alex Kim",
+            "email": "alex@example.com",
+            "phone": "+1 234 567 890",
+            "linkedin": "https://linkedin.com/in/alexkim",
             "location": "Berlin, Germany",
             "title_tagline": "Senior Product Manager | AI & Growth",
             "skills": {
@@ -21,7 +21,7 @@ class TestCVData:
             "experience": [
                 {
                     "title": "Senior Product Manager",
-                    "company": "Tourlane",
+                    "company": "Acme Corp",
                     "location": "Berlin, Germany",
                     "dates": "Sep 2022 -- Oct 2025",
                     "company_description": "Leading European travel platform",
@@ -34,7 +34,7 @@ class TestCVData:
             "side_projects": [
                 {
                     "name": "Film Festival Schedule Planner",
-                    "github_url": "https://github.com/jo-ooo-ooo/plannale",
+                    "github_url": "https://github.com/user/plannale",
                     "bullets": [
                         "Built a Chrome extension for optimizing festival schedules",
                     ],
@@ -42,23 +42,23 @@ class TestCVData:
             ],
             "education": {
                 "degree": "BA in Advertising",
-                "university": "Fudan University",
+                "university": "Example University",
             },
         }
         cv = CVData.from_dict(data)
-        assert cv.name == "Joyce Chen"
-        assert cv.email == "ytchen37@gmail.com"
+        assert cv.name == "Alex Kim"
+        assert cv.email == "alex@example.com"
         assert len(cv.experience) == 1
-        assert cv.experience[0].company == "Tourlane"
+        assert cv.experience[0].company == "Acme Corp"
         assert len(cv.side_projects) == 1
-        assert cv.side_projects[0].github_url == "https://github.com/jo-ooo-ooo/plannale"
+        assert cv.side_projects[0].github_url == "https://github.com/user/plannale"
         assert cv.education["degree"] == "BA in Advertising"
 
     def test_from_dict_missing_optional_fields(self):
         data = {
-            "name": "Joyce Chen",
-            "email": "ytchen37@gmail.com",
-            "phone": "+49 160 4629745",
+            "name": "Alex Kim",
+            "email": "alex@example.com",
+            "phone": "+1 234 567 890",
             "location": "Berlin, Germany",
             "title_tagline": "Senior PM",
             "skills": {"Product": ["A/B testing"]},
@@ -71,15 +71,15 @@ class TestCVData:
 
     def test_from_dict_missing_required_field_raises(self):
         with pytest.raises(KeyError):
-            CVData.from_dict({"name": "Joyce Chen"})
+            CVData.from_dict({"name": "Alex Kim"})
 
 
 class TestParseCvJson:
     def test_parses_clean_json(self):
         raw = json.dumps({
-            "name": "Joyce Chen",
-            "email": "ytchen37@gmail.com",
-            "phone": "+49 160 4629745",
+            "name": "Alex Kim",
+            "email": "alex@example.com",
+            "phone": "+1 234 567 890",
             "location": "Berlin, Germany",
             "title_tagline": "Senior PM",
             "skills": {"Product": ["A/B testing"]},
@@ -87,31 +87,31 @@ class TestParseCvJson:
             "education": {"degree": "BA", "university": "University"},
         })
         cv = parse_cv_json(raw)
-        assert cv.name == "Joyce Chen"
+        assert cv.name == "Alex Kim"
 
     def test_parses_json_inside_code_fences(self):
-        raw = '```json\n{"name": "Joyce Chen", "email": "a@b.com", "phone": "+1", "location": "Berlin", "title_tagline": "PM", "skills": {}, "experience": [], "education": {"degree": "BA", "university": "U"}}\n```'
+        raw = '```json\n{"name": "Alex Kim", "email": "a@b.com", "phone": "+1", "location": "Berlin", "title_tagline": "PM", "skills": {}, "experience": [], "education": {"degree": "BA", "university": "U"}}\n```'
         cv = parse_cv_json(raw)
-        assert cv.name == "Joyce Chen"
+        assert cv.name == "Alex Kim"
 
     def test_parses_json_with_trailing_junk(self):
         """LLMs sometimes add --- or commentary after the JSON."""
-        raw = '```json\n{"name": "Joyce Chen", "email": "a@b.com", "phone": "+1", "location": "Berlin", "title_tagline": "PM", "skills": {}, "experience": [], "education": {"degree": "BA", "university": "U"}}\n```\n\n---\n'
+        raw = '```json\n{"name": "Alex Kim", "email": "a@b.com", "phone": "+1", "location": "Berlin", "title_tagline": "PM", "skills": {}, "experience": [], "education": {"degree": "BA", "university": "U"}}\n```\n\n---\n'
         cv = parse_cv_json(raw)
-        assert cv.name == "Joyce Chen"
+        assert cv.name == "Alex Kim"
 
     def test_parses_json_with_leading_text(self):
         """LLMs sometimes add commentary before the JSON."""
-        raw = 'Here is the CV:\n\n{"name": "Joyce Chen", "email": "a@b.com", "phone": "+1", "location": "Berlin", "title_tagline": "PM", "skills": {}, "experience": [], "education": {"degree": "BA", "university": "U"}}'
+        raw = 'Here is the CV:\n\n{"name": "Alex Kim", "email": "a@b.com", "phone": "+1", "location": "Berlin", "title_tagline": "PM", "skills": {}, "experience": [], "education": {"degree": "BA", "university": "U"}}'
         cv = parse_cv_json(raw)
-        assert cv.name == "Joyce Chen"
+        assert cv.name == "Alex Kim"
 
     def test_invalid_json_raises(self):
         with pytest.raises(ValueError, match="Failed to parse"):
             parse_cv_json("This is not JSON at all")
 
     def test_json_missing_required_field_raises(self):
-        raw = json.dumps({"name": "Joyce"})
+        raw = json.dumps({"name": "Alex"})
         with pytest.raises((KeyError, ValueError)):
             parse_cv_json(raw)
 

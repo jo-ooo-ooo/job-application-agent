@@ -4,6 +4,7 @@ These catch problems that unit tests can't: hallucinated experience,
 missing candidate info, word count violations, etc.
 """
 
+from __future__ import annotations
 import re
 
 
@@ -220,3 +221,114 @@ def format_warnings(warnings: list[str], label: str) -> str:
         lines.append(f"  ⚠ {w}")
     lines.append("")
     return "\n".join(lines)
+
+
+def validate_cv_against_scaffold(cv_dict: dict, scaffold: "CVScaffold") -> list[str]:
+    """Validate generated CV dict against the parsed master list scaffold.
+
+    Three deterministic checks:
+    1. Experience — all skeleton roles present; company/title/location/dates match.
+    2. Side projects — selected name+github_url pairs exist in catalogue.
+    3. Skills — every token exists in the master list inventory.
+
+    Returns a list of warning strings (empty = pass).
+    """
+    from cv_scaffold import CVScaffold  # local import avoids circular dependency
+    warnings = []
+
+    # ── 1. Experience ──────────────────────────────────────────────────────
+    generated_experience = cv_dict.get("experience", [])
+    generated_by_company = {
+        e.get("company", "").strip(): e
+        for e in generated_experience
+        if e.get("company", "").strip()
+    }
+
+    for skeleton in scaffold.experience_skeletons:
+        if skeleton.company not in generated_by_company:
+            warnings.append(
+                f"Experience: role at '{skeleton.company}' is missing. "
+                "All professional experience from the master list must be included."
+            )
+            continue
+
+        gen = generated_by_company[skeleton.company]
+
+        gen_title = gen.get("title", "").strip()
+        if gen_title.lower() != skeleton.title.lower():
+            warnings.append(
+                f"Experience '{skeleton.company}': title mismatch. "
+                f"Expected '{skeleton.title}', got '{gen_title}'."
+            )
+
+        gen_location = gen.get("location", "").strip()
+        if gen_location.lower() != skeleton.location.lower():
+            warnings.append(
+                f"Experience '{skeleton.company}': location mismatch. "
+                f"Expected '{skeleton.location}', got '{gen_location}'."
+            )
+
+        gen_dates = _normalize_dates(gen.get("dates", ""))
+        ref_dates = _normalize_dates(skeleton.dates)
+        if gen_dates != ref_dates:
+            warnings.append(
+                f"Experience '{skeleton.company}': dates mismatch. "
+                f"Expected '{skeleton.dates}', got '{gen.get('dates', '')}'."
+            )
+
+    scaffold_companies = {s.company for s in scaffold.experience_skeletons}
+    for exp in generated_experience:
+        company = exp.get("company", "").strip()
+        if company and company not in scaffold_companies:
+            warnings.append(
+                f"Experience: '{company}' is not in the master list — "
+                "never invent companies."
+            )
+
+    # ── 2. Side projects ───────────────────────────────────────────────────
+    generated_projects = cv_dict.get("side_projects", [])
+    ref_by_name = {ref.name: ref for ref in scaffold.side_project_refs}
+
+    n = len(generated_projects)
+    if n < 2 or n > 4:
+        warnings.append(f"Side projects: {n} selected (expected 2-4).")
+
+    for proj in generated_projects:
+        gen_name = proj.get("name", "").strip()
+        if gen_name not in ref_by_name:
+            warnings.append(
+                f"Side project '{gen_name}' is not in the master list — "
+                "project names must be copied exactly."
+            )
+            continue
+        ref = ref_by_name[gen_name]
+        if ref.github_url:
+            gen_url = proj.get("github_url", "").strip()
+            if gen_url != ref.github_url:
+                warnings.append(
+                    f"Side project '{gen_name}': github_url mismatch. "
+                    f"Expected '{ref.github_url}', got '{gen_url}'."
+                )
+
+    # ── 3. Skills ──────────────────────────────────────────────────────────
+    generated_skills: dict = cv_dict.get("skills", {})
+    for tokens in generated_skills.values():
+        if not isinstance(tokens, list):
+            continue
+        for token in tokens:
+            token = token.strip()
+            if token and token not in scaffold.skills_inventory:
+                warnings.append(
+                    f"Skill '{token}' is not in the master list inventory."
+                )
+
+    return warnings
+
+
+def _normalize_dates(dates_str: str) -> str:
+    """Normalize date strings for comparison.
+
+    Collapses any dash/en-dash/em-dash variant (with optional spaces) to ' - '.
+    This lets 'Sep 2022 -- Oct 2025' (LaTeX) match 'Sep 2022 - Oct 2025' (master list).
+    """
+    return re.sub(r'\s*[-—–]+\s*', ' - ', dates_str.strip())

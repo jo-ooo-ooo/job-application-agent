@@ -163,6 +163,23 @@ def render_cover_letter_latex(
     )
 
 
+def _find_pdflatex() -> str:
+    """Find the pdflatex binary, checking common TexLive install paths."""
+    # Check PATH first
+    found = shutil.which("pdflatex")
+    if found:
+        return found
+    # Common macOS TexLive locations
+    for candidate in [
+        "/usr/local/texlive/2026/bin/universal-darwin/pdflatex",
+        "/usr/local/texlive/2025/bin/universal-darwin/pdflatex",
+        "/Library/TeX/texbin/pdflatex",
+    ]:
+        if os.path.isfile(candidate):
+            return candidate
+    raise RuntimeError("pdflatex not found. Install TexLive: brew install --cask mactex-no-gui")
+
+
 def compile_latex(tex_path: str, pdf_path: str) -> None:
     """Compile a .tex file to PDF using pdflatex.
 
@@ -171,9 +188,10 @@ def compile_latex(tex_path: str, pdf_path: str) -> None:
     tex_path = Path(tex_path)
     pdf_path = Path(pdf_path)
     work_dir = tex_path.parent
+    pdflatex = _find_pdflatex()
 
     result = subprocess.run(
-        ["pdflatex", "-interaction=nonstopmode", "-output-directory", str(work_dir), str(tex_path)],
+        [pdflatex, "-interaction=nonstopmode", "-output-directory", str(work_dir), str(tex_path)],
         capture_output=True,
         text=True,
         timeout=30,

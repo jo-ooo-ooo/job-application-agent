@@ -132,20 +132,17 @@ The candidate answered questions about potential missing experience:
 
 {user_answers}
 
-CURRENT MASTER LIST:
-{master_list_content}
+For each answer where the candidate confirmed having relevant experience, write a concise
+addition in plain markdown bullet points — exactly as you would write it in the master list.
 
-Based on the candidate's answers:
-1. If they confirmed having relevant experience, add it to the appropriate section
-   of the master list. Keep the same formatting style.
-2. If they said no, that's fine — leave the master list unchanged.
-
-CRITICAL OUTPUT RULES:
-- Output ONLY the raw markdown content of the master list. Nothing else.
-- Do NOT wrap it in ```markdown``` code blocks.
-- Do NOT add commentary, explanations, or summaries before or after.
-- The output must start with "# " (the first heading) and end with the last line of content.
-- This output will be written directly to a file, so it must be clean markdown only.
+OUTPUT RULES:
+- Output ONLY the new content to add (not the whole master list).
+- Do NOT restate questions or answers — just the bullet points to add.
+- Do NOT wrap in code blocks.
+- If all answers are "no" or "don't have this", output exactly: NO_UPDATE
+- Format example:
+  **[Context label]:** Confirmed experience with X — [1-line description].
+  - Bullet describing what they did with X.
 """
 
 STEP_GAP_REASSESSMENT = """\
@@ -184,12 +181,16 @@ ROLE CONTEXT:
 GAP ANALYSIS:
 {gap_analysis}
 
+CANDIDATE COMPANIES (all roles will appear in the CV — do NOT recommend skipping any):
+{scaffold_companies}
+
 Read cvs/projects_master_list.md. The file contains multiple bullet-point versions for some
 roles (General, Strategic Insights, 0-to-1 Builder). Pick the VERSION that best matches
 what this hiring team cares about.
 
-IMPORTANT: Focus on the candidate's two most recent roles — earlier experience is less
-relevant and should only be included briefly if it fills a specific gap.
+Your task is to select which BULLETS and VERSIONS to use — not which companies to include.
+Every company above will appear in the final CV. For older or less relevant roles, recommend
+1-2 bullets that are least bad; never say "skip entirely."
 
 List each selection in 1 line: [Project/Role + version] — [why the hiring team would care]
 Max 8 items.
@@ -207,29 +208,39 @@ ROLE CONTEXT:
 SELECTED EXPERIENCE:
 {project_selection}
 
+CV SCAFFOLD — FROZEN FACTS (copy these fields exactly, do not alter them):
+{scaffold_json}
+
+The scaffold defines:
+- experience_skeletons: EVERY role listed here MUST appear in the output — no exceptions,
+  no omissions. Copy title, company, location, and dates exactly as given.
+  You write the bullets and company_description.
+- side_project_refs: the full catalogue. Pick 2-4. Copy name and github_url exactly.
+  You write the bullets.
+- skills_inventory: every valid skill token. Select and group freely, but every token
+  you include MUST appear verbatim in this list — no inventions, no paraphrases.
+
 Read cvs/template_standard.md for the candidate's contact info.
-Read cvs/projects_master_list.md for the full experience and side projects (including GitHub links).
+Read cvs/projects_master_list.md for bullet inspiration for each role and project.
 
 Rules:
 - Think like the hiring manager: what would make them say "this person gets it"?
-- Fill the structure with selected experience, reframed in the language the hiring team uses
-- Mirror keywords from the JD naturally (ATS optimization)
+- Reframe bullets in the language the hiring team uses; mirror JD keywords naturally
 - FOCUS on the two most recent roles — give them the most space and strongest bullets
-- Earlier roles: 1-2 bullets max, only if they fill a specific gap
+- Earlier roles: include with 1-2 bullets minimum — keep them brief but never omit them
 - Each bullet: Action + Result + Impact (quantify where possible)
 - Pick the bullet-point version (General/Strategic/0-to-1) that best matches this role
-- For side projects: select 2-4 that best demonstrate relevant skills for this role
-- Include the GitHub URL for each side project from the master list
 - Target: 1 page. Keep bullet counts tight.
 - For LaTeX compatibility: use -- for en-dashes in date ranges (e.g., "Sep 2022 -- Oct 2025")
 - Do NOT escape special characters like &, %, $ — the system handles that automatically
+- Do NOT add career break, gap year, or relocation entries to the experience list
 
 Output ONLY valid JSON in this exact structure (no commentary, no markdown):
 
 {{
   "name": "Candidate Name",
   "email": "email@example.com",
-  "phone": "+49 123 456",
+  "phone": "+1 234 567 890",
   "linkedin": "https://linkedin.com/in/username",
   "location": "City, Country",
   "title_tagline": "One-line positioning statement tailored to this role",
@@ -353,9 +364,12 @@ OUTPUT FORMAT (follow exactly):
 ## REVISED COVER LETTER
 [full cover letter markdown here]
 
-Rules: Never invent new experience. Only address the specific issues listed.
-For LaTeX compatibility: use -- for en-dashes in date ranges.
-Do NOT escape special characters like &, %, $ — the system handles that automatically.
+Rules:
+- ONLY companies listed under "Professional Experience" in cvs/projects_master_list.md may appear. Any other company name is a hallucination — remove it.
+- Never add, invent, or rename experience entries. Only rewrite bullets or reorder within the existing entries.
+- Only address the specific issues listed.
+- For LaTeX compatibility: use -- for en-dashes in date ranges.
+- Do NOT escape special characters like &, %, $ — the system handles that automatically.
 """
 
 STEP_REVISION = """\
@@ -372,7 +386,10 @@ CURRENT CV:
 CURRENT COVER LETTER:
 {cover_letter_markdown}
 
-Rules: Never invent new experience. Output both revised documents.
+Rules:
+- ONLY companies listed under "Professional Experience" in cvs/projects_master_list.md may appear. Any other company name is a hallucination — remove it.
+- Never add, invent, or rename experience entries. Only rewrite bullets or reorder within the existing entries.
+- Output both revised documents.
 
 OUTPUT FORMAT:
 ## REVISED CV

@@ -9,3 +9,6 @@ eval/results/
 __pycache__/
 *.pyc
 .DS_Store
+
+docs/
+examples/*.pdf
