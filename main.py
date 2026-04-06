@@ -10,7 +10,7 @@ from pathlib import Path
 import anthropic
 from dotenv import load_dotenv
 
-from agent import run_step
+from agent import run_step, set_model
 from run_logger import RunLogger
 from checkpoint import (
     generate_run_id,
@@ -61,6 +61,7 @@ def main():
     parser = argparse.ArgumentParser(description="AI-powered job application agent")
     parser.add_argument("--job", type=str, help="Job description text, file path, or URL")
     parser.add_argument("--resume", type=str, nargs="?", const="latest", help="Resume from checkpoint (run ID, or 'latest')")
+    parser.add_argument("--model", type=str, default=None, help="Model override: haiku, sonnet, opus (default: sonnet)")
     args = parser.parse_args()
 
     if not args.job and not args.resume:
@@ -69,7 +70,11 @@ def main():
         print("       python3 main.py --job https://linkedin.com/jobs/view/...")
         print("       python3 main.py --resume              (resume latest run)")
         print("       python3 main.py --resume <run_id>     (resume specific run)")
+        print("       python3 main.py --job jd.txt --model haiku   (cheaper test run)")
         sys.exit(1)
+
+    if args.model:
+        set_model(args.model)
 
     # ── Handle resume from checkpoint ────────────────────────
     checkpoint = None
@@ -135,6 +140,13 @@ def main():
         print(f"  [scaffold] {len(scaffold.experience_skeletons)} roles, "
               f"{len(scaffold.side_project_refs)} projects, "
               f"{len(scaffold.skills_inventory)} skill tokens")
+        # Warn if the master list looks truncated — scaffold validation is only as
+        # good as what it parsed; a suspiciously small scaffold makes it dangerous
+        # (it will flag real companies as hallucinations).
+        if len(scaffold.experience_skeletons) < 2:
+            print(f"\n  !! WARNING: scaffold only found {len(scaffold.experience_skeletons)} role(s). "
+                  "The master list may be truncated. Check cvs/projects_master_list.md "
+                  "before continuing — scaffold validation will misfire on a partial file.\n")
     except ValueError as e:
         print(f"  [scaffold] Warning: could not parse scaffold — {e}")
         scaffold = None

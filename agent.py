@@ -5,7 +5,48 @@ import anthropic
 from tools import TOOL_DEFINITIONS, execute_tool
 from run_logger import StepMetrics
 
-MODEL = "claude-sonnet-4-6"
+AVAILABLE_MODELS = {
+    "sonnet": "claude-sonnet-4-6",
+    "haiku": "claude-haiku-4-5-20251001",
+    "opus": "claude-opus-4-6",
+}
+
+# Default model for steps not listed in STEP_MODELS
+_DEFAULT_MODEL = AVAILABLE_MODELS["sonnet"]
+
+# Per-step model routing.
+# Haiku: analytical steps with no creative generation (read + score + judge).
+# Sonnet: steps that write content or require nuanced judgment under pressure.
+STEP_MODELS = {
+    "company_research":  AVAILABLE_MODELS["haiku"],
+    "role_analysis":     AVAILABLE_MODELS["haiku"],
+    "gap_analysis":      AVAILABLE_MODELS["haiku"],
+    "gap_reassessment":  AVAILABLE_MODELS["haiku"],
+    "critic_review":     AVAILABLE_MODELS["haiku"],
+    # Sonnet (default) for all writing and revision steps:
+    # gap_update, project_selection, cv_construction, cover_letter,
+    # critic_revision, guardrail_fix, revision
+}
+
+# Override — set by --model flag to force a single model for all steps
+_model_override: str | None = None
+
+
+def set_model(name: str) -> None:
+    """Force all steps to use one model (e.g. for --model haiku test runs)."""
+    global _model_override
+    _model_override = AVAILABLE_MODELS.get(name, name)
+    print(f"  [model] All steps overridden to {_model_override}")
+
+
+def _model_for_step(step_name: str | None) -> str:
+    if _model_override:
+        return _model_override
+    if step_name:
+        return STEP_MODELS.get(step_name, _DEFAULT_MODEL)
+    return _DEFAULT_MODEL
+
+
 MAX_RETRIES = 5
 RETRY_DELAY = 5  # seconds
 
@@ -26,14 +67,16 @@ STEP_TEMPERATURES = {
 DEFAULT_TEMPERATURE = 0
 
 
-def _api_call_with_retry(client, system_prompt, messages, temperature=0, metrics=None, tools=None):
+def _api_call_with_retry(client, system_prompt, messages, temperature=0, metrics=None, tools=None, model=None):
     """Call the Anthropic API with retry logic for connection and rate limit errors."""
     if tools is None:
         tools = TOOL_DEFINITIONS
+    if model is None:
+        model = _DEFAULT_MODEL
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             response = client.messages.create(
-                model=MODEL,
+                model=model,
                 max_tokens=4096,
                 temperature=temperature,
                 system=system_prompt,
@@ -72,11 +115,11 @@ def run_step(
 
     Each call starts a FRESH conversation — no history carried over.
     The caller is responsible for injecting relevant state into user_message.
-    Optionally accepts a StepMetrics object to track tokens/latency/tools.
-    step_name is used to look up the appropriate temperature.
+    step_name drives both temperature and model selection (see STEP_MODELS).
     exclude_tools filters out specific tools (e.g. ["generate_pdf"]).
     """
     temperature = STEP_TEMPERATURES.get(step_name, DEFAULT_TEMPERATURE)
+    model = _model_for_step(step_name)
     messages = [{"role": "user", "content": user_message}]
 
     tools = TOOL_DEFINITIONS
@@ -84,7 +127,7 @@ def run_step(
         tools = [t for t in TOOL_DEFINITIONS if t["name"] not in exclude_tools]
 
     while True:
-        response = _api_call_with_retry(client, system_prompt, messages, temperature, metrics, tools=tools)
+        response = _api_call_with_retry(client, system_prompt, messages, temperature, metrics, tools=tools, model=model)
 
         assistant_content = response.content
         messages.append({"role": "assistant", "content": assistant_content})
