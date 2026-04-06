@@ -242,6 +242,7 @@ Output ONLY valid JSON in this exact structure (no commentary, no markdown):
   "email": "email@example.com",
   "phone": "+1 234 567 890",
   "linkedin": "https://linkedin.com/in/username",
+  "github": "https://github.com/username",
   "location": "City, Country",
   "title_tagline": "One-line positioning statement tailored to this role",
   "skills": {{

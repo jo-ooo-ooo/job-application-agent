@@ -52,6 +52,7 @@ class CVData:
     experience: list[Experience]
     education: dict[str, str]
     linkedin: str = ""
+    github: str = ""
     side_projects: list[SideProject] = field(default_factory=list)
 
     @classmethod
@@ -66,6 +67,7 @@ class CVData:
             experience=[Experience.from_dict(e) for e in d["experience"]],
             education=d["education"],
             linkedin=d.get("linkedin", ""),
+            github=d.get("github", ""),
             side_projects=[SideProject.from_dict(p) for p in d.get("side_projects", [])],
         )
 

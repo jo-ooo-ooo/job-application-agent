@@ -840,16 +840,16 @@ def _build_pdf_filenames(candidate_name: str, state: dict) -> tuple[str, str]:
     research = state.get("company_research", "")
 
     # ── Company name ──────────────────────────────────────────────────────────
-    # Best source: company_research — the model always writes "- Company: Name, ..."
-    # which is the most reliable signal for the target company.
-    m = re.search(r'[-*]\s*Company:\s*\[?([A-Za-z0-9][A-Za-z0-9 .&\'-]{1,40}?)(?:[,\[\]]|$)', research)
+    # Best source: company_research — the model writes "**Company:** Name, ..."
+    # Match both "- Company:" and "- **Company:**" (bold markdown) variants.
+    m = re.search(r'[-*]\s*\**Company:\**\s*\[?([A-Za-z0-9][A-Za-z0-9 .&\'-]{1,40}?)(?:\s*[,\(\[]|$)', research, re.MULTILINE)
     if m:
         company = m.group(1).strip()
 
-    # Fallback: role_analysis header "CompanyName — Role Title" pattern
+    # Fallback: role_analysis often has "## CompanyName — Role Title"
     if not company:
         role_analysis = state.get("role_analysis", "")
-        m = re.search(r'(?:##|###)\s*[^—\n]+?—\s*([A-Z][A-Za-z0-9 .&\'-]{1,40}?)\s*\n', role_analysis)
+        m = re.search(r'(?:##|###)\s*([A-Z][A-Za-z0-9 .&\'-]{1,30}?)\s*[—–-]', role_analysis)
         if m:
             company = m.group(1).strip()
 
