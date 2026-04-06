@@ -223,6 +223,19 @@ The scaffold defines:
 Read cvs/template_standard.md for the candidate's contact info.
 Read cvs/projects_master_list.md for bullet inspiration for each role and project.
 
+SKILLS SECTION RULES (strictly enforced):
+- Maximum 5 categories. Merge related skills rather than splitting into thin groups.
+- Typical good groupings: Product & Analytics, Discovery & Research, AI & Technical,
+  Collaboration & Leadership, Domain-specific (only if highly relevant to this JD).
+- Behavioural science, nudge theory, etc. belong in Product & Analytics or omitted —
+  NOT a standalone category.
+- Content/localisation tools (Contentful, Phrase) belong in AI & Technical, not their
+  own category.
+- Every item in a category MUST be a short skill tag (1-4 words).
+  NO narrative sentences, NO explanations, NO parenthetical context in skill items.
+  Wrong: "basic frontend knowledge; builds side projects independently using Claude Code"
+  Right: "Claude Code", "Cursor", "basic frontend"
+
 Rules:
 - Think like the hiring manager: what would make them say "this person gets it"?
 - Reframe bullets in the language the hiring team uses; mirror JD keywords naturally

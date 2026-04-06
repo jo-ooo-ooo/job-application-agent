@@ -62,7 +62,13 @@ def main():
     parser.add_argument("--job", type=str, help="Job description text, file path, or URL")
     parser.add_argument("--resume", type=str, nargs="?", const="latest", help="Resume from checkpoint (run ID, or 'latest')")
     parser.add_argument("--model", type=str, default=None, help="Model override: haiku, sonnet, opus (default: sonnet)")
+    parser.add_argument("--quick", action="store_true", help="Fast mode: skip web search, gap questions, cover letter, and cap critic at 1 round")
+    parser.add_argument("--no-cover-letter", action="store_true", dest="no_cover_letter", help="Skip cover letter generation and PDF")
     args = parser.parse_args()
+
+    # --quick implies --no-cover-letter
+    if args.quick:
+        args.no_cover_letter = True
 
     if not args.job and not args.resume:
         print("Usage: python3 main.py --job 'job description text'")
@@ -71,10 +77,17 @@ def main():
         print("       python3 main.py --resume              (resume latest run)")
         print("       python3 main.py --resume <run_id>     (resume specific run)")
         print("       python3 main.py --job jd.txt --model haiku   (cheaper test run)")
+        print("       python3 main.py --job jd.txt --quick            (fast mode for low-priority jobs)")
+        print("       python3 main.py --job jd.txt --no-cover-letter  (CV only, skip cover letter)")
         sys.exit(1)
 
     if args.model:
         set_model(args.model)
+
+    if args.quick:
+        print("  [quick] Fast mode: web search skipped, gap questions skipped, cover letter skipped, critic capped at 1 round")
+    elif args.no_cover_letter:
+        print("  [no-cover-letter] Cover letter generation skipped")
 
     # ── Handle resume from checkpoint ────────────────────────
     checkpoint = None
@@ -196,7 +209,7 @@ def main():
     # ── Step 1: Parallel Research (Company + Role) ───────────
     if "research" not in completed_steps:
         print("\n[Step 1/6] Researching company and analyzing role (parallel)...")
-        research = run_parallel_research(client, state["job_description"], logger)
+        research = run_parallel_research(client, state["job_description"], logger, quick=args.quick)
         state["company_research"] = research["company_research"]
         state["role_analysis"] = research["role_analysis"]
         completed_steps.append("research")
@@ -215,7 +228,9 @@ def main():
         print(format_warnings(gap_warnings, "Gap Analysis"))
 
         # ── Gap Questions: Ask user about potential missing experience ──
-        user_answers = _handle_gap_questions(client, state, master_list_path, logger)
+        user_answers = None
+        if not args.quick:
+            user_answers = _handle_gap_questions(client, state, master_list_path, logger)
 
         # ── Re-assess if we learned new info ──────────────────────
         if user_answers:
@@ -384,7 +399,10 @@ def main():
         print(state.get("cv_markdown", ""))
 
     # ── Step 6: Cover Letter ──────────────────────────────────
-    if "cover_letter" not in completed_steps:
+    if args.no_cover_letter:
+        print("\n[Step 5/6] Cover letter — skipped (--no-cover-letter)")
+        state["cover_letter_markdown"] = ""
+    elif "cover_letter" not in completed_steps:
         print("\n[Step 5/6] Writing cover letter...")
         metrics = logger.start_step("cover_letter")
         raw_cl = run_step(
@@ -403,7 +421,7 @@ def main():
         save_checkpoint(run_id, state, completed_steps, completed_gates)
     else:
         print("\n[Step 5/6] Cover letter — skipped (cached)")
-    print(state["cover_letter_markdown"])
+        print(state["cover_letter_markdown"])
 
     # ── Critic Review Loop ────────────────────────────────────
     # Use structured JSON if available, fall back to markdown
@@ -416,6 +434,7 @@ def main():
         cv_markdown=cv_for_critic,
         cover_letter_markdown=state["cover_letter_markdown"],
         logger=logger,
+        **({ "max_iterations": 1 } if args.quick else {}),
     )
 
     # Update state from critic result
@@ -439,7 +458,7 @@ def main():
             cv_warnings = ["CV JSON is malformed after critic loop."]
     else:
         cv_warnings = validate_cv(state.get("cv_markdown", ""), candidate_name)
-    cl_warnings = validate_cover_letter(state["cover_letter_markdown"], candidate_name)
+    cl_warnings = [] if args.no_cover_letter else validate_cover_letter(state["cover_letter_markdown"], candidate_name)
     if cv_warnings or cl_warnings:
         if cv_warnings:
             print(format_warnings(cv_warnings, "CV"))
@@ -491,12 +510,14 @@ def main():
         (output_dir / "cv_preview.json").write_text(state["cv_json"], encoding="utf-8")
     else:
         (output_dir / "cv_preview.md").write_text(state.get("cv_markdown", ""), encoding="utf-8")
-    (output_dir / "cover_letter_preview.md").write_text(state["cover_letter_markdown"], encoding="utf-8")
+    if not args.no_cover_letter:
+        (output_dir / "cover_letter_preview.md").write_text(state["cover_letter_markdown"], encoding="utf-8")
 
     # ── STOP Gate 2 ───────────────────────────────────────────
     while True:
         print("\n" + "=" * 60)
-        print("STOP GATE: Review CV and cover letter.")
+        gate_label = "Review CV." if args.no_cover_letter else "Review CV and cover letter."
+        print(f"STOP GATE: {gate_label}")
         print(f"  Preview files saved to: {output_dir}/")
         print("=" * 60)
         print("Options: (a)pprove  (r)evise  (q)uit")
@@ -563,29 +584,30 @@ def main():
     print(f"  CV saved to {cv_path} ({cv_pages} page{'s' if cv_pages > 1 else ''})")
 
     # Cover letter: use LaTeX, fall back to fpdf2
-    try:
-        # Get contact info from CV data
-        if state.get("cv_json"):
-            cv_info = _json.loads(state["cv_json"])
-            cl_name = cv_info.get("name", candidate_name)
-            cl_email = cv_info.get("email", "")
-            cl_phone = cv_info.get("phone", "")
-            cl_location = cv_info.get("location", "")
-        else:
-            cl_name = candidate_name
-            cl_email = ""
-            cl_phone = ""
-            cl_location = ""
-        cl_pages = generate_cover_letter_pdf(
-            cl_name, cl_email, cl_phone, cl_location,
-            state["cover_letter_markdown"],
-            str(cl_path),
-        )
-    except Exception as e:
-        print(f"  [warning] LaTeX cover letter failed: {e}")
-        print("  [warning] Falling back to fpdf2.")
-        cl_pages = generate_pdf_from_markdown(state["cover_letter_markdown"], str(cl_path))
-    print(f"  Cover letter saved to {cl_path} ({cl_pages} page{'s' if cl_pages > 1 else ''})")
+    if not args.no_cover_letter:
+        try:
+            # Get contact info from CV data
+            if state.get("cv_json"):
+                cv_info = _json.loads(state["cv_json"])
+                cl_name = cv_info.get("name", candidate_name)
+                cl_email = cv_info.get("email", "")
+                cl_phone = cv_info.get("phone", "")
+                cl_location = cv_info.get("location", "")
+            else:
+                cl_name = candidate_name
+                cl_email = ""
+                cl_phone = ""
+                cl_location = ""
+            cl_pages = generate_cover_letter_pdf(
+                cl_name, cl_email, cl_phone, cl_location,
+                state["cover_letter_markdown"],
+                str(cl_path),
+            )
+        except Exception as e:
+            print(f"  [warning] LaTeX cover letter failed: {e}")
+            print("  [warning] Falling back to fpdf2.")
+            cl_pages = generate_pdf_from_markdown(state["cover_letter_markdown"], str(cl_path))
+        print(f"  Cover letter saved to {cl_path} ({cl_pages} page{'s' if cl_pages > 1 else ''})")
 
     # ── Log to Google Sheets via MCP ──────────────────────────
     final_score = state.get("final_score", 50.0)
@@ -674,23 +696,41 @@ def _handle_gap_questions(client, state, master_list_path, logger=None):
     if not questions:
         return None
 
-    print("\n" + "-" * 60)
-    print("The agent has questions about potential missing experience.")
-    print("Your answers help improve this application AND future ones.")
-    print("-" * 60)
-    print("\nAnswer each question, or press Enter to skip. Type 'done' to finish.\n")
+    print("\n" + "=" * 60)
+    print("  !! ACTION REQUIRED: ANSWER BEFORE CONTINUING !!")
+    print("=" * 60)
+    print(f"  {len(questions)} question(s) found. Answers are saved to your master")
+    print("  list and improve ALL future applications — not just this one.")
+    print("  Press Enter alone to skip a question.")
+    print("=" * 60)
 
+    # Show all questions upfront so the user knows what's coming
+    print()
+    for i, question in enumerate(questions, 1):
+        print(f"  Q{i}: {question}")
+    print()
+
+    import sys
     answers = []
     for i, question in enumerate(questions, 1):
-        print(f"Q{i}: {question}")
-        answer = input("A:  ").strip()
+        print(f"  ── Question {i}/{len(questions)} ──")
+        print(f"  {question}")
+        sys.stdout.flush()
+        try:
+            answer = input("  Your answer (or Enter to skip): ").strip()
+        except EOFError:
+            print("\n  [warning] stdin closed — skipping remaining questions.")
+            break
         if answer.lower() == "done":
             break
         if answer:
             answers.append(f"Q: {question}\nA: {answer}")
+            print(f"  ✓ Saved.\n")
+        else:
+            print(f"  — Skipped.\n")
 
     if not answers:
-        print("No new experience to add.")
+        print("  No answers provided — master list unchanged.")
         return None
 
     answers_text = "\n\n".join(answers)
@@ -792,13 +832,13 @@ def _extract_questions(gap_text: str) -> list[str]:
     """
     import re
 
-    # Find the questions section — case-insensitive, handles bold markers
-    import re as _re
+    # Find the QUESTIONS section header — must be a standalone header line,
+    # not the word "questions" appearing mid-sentence.
+    # Matches lines like: "QUESTIONS:", "## QUESTIONS", "**QUESTIONS**", "QUESTIONS"
     questions_start = None
-    # Strip bold markers and normalize for matching
-    match = _re.search(r'\*{0,2}questions[^*\n]*\*{0,2}', gap_text, _re.IGNORECASE)
-    if match:
-        questions_start = match.end()
+    for line_match in re.finditer(r'^[#*\s]*questions[*:]*\s*$', gap_text, re.IGNORECASE | re.MULTILINE):
+        questions_start = line_match.end()
+        break  # Use first occurrence only
 
     if questions_start is None:
         return []
@@ -854,7 +894,7 @@ def _build_pdf_filenames(candidate_name: str, state: dict) -> tuple[str, str]:
     # ── Company name ──────────────────────────────────────────────────────────
     # Best source: company_research — the model writes "**Company:** Name, ..."
     # Match both "- Company:" and "- **Company:**" (bold markdown) variants.
-    m = re.search(r'[-*]\s*\**Company:\**\s*\[?([A-Za-z0-9][A-Za-z0-9 .&\'-]{1,40}?)(?:\s*[,\(\[]|$)', research, re.MULTILINE)
+    m = re.search(r'[-*]\s*\**Company:\**\s*\[?([A-Za-z0-9][A-Za-z0-9 .&\'-]{1,40}?)(?:\*{0,2}\s*[,\(\[]|\*{0,2}\s*$)', research, re.MULTILINE)
     if m:
         company = m.group(1).strip()
 

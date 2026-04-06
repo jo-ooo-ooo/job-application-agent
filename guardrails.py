@@ -182,6 +182,21 @@ def validate_cv_structured(cv_data: dict, candidate_name: str, max_total_bullets
         if re.search(pattern, all_text, re.IGNORECASE):
             warnings.append(f"CV contains placeholder text matching: {pattern}")
 
+    # 6. Skills section: too many categories or narrative sentences in skill items
+    skills = cv_data.get("skills", {})
+    if isinstance(skills, dict):
+        if len(skills) > 5:
+            warnings.append(
+                f"Skills section has {len(skills)} categories (max 5). Merge related groups."
+            )
+        for cat, items in skills.items():
+            if isinstance(items, list):
+                for item in items:
+                    if isinstance(item, str) and (len(item) > 60 or ";" in item):
+                        warnings.append(
+                            f"Skill item in '{cat}' reads as a sentence, not a tag: \"{item[:80]}\""
+                        )
+
     return warnings
 
 

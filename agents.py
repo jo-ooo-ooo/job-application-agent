@@ -106,11 +106,13 @@ def run_parallel_research(
     client,
     job_description: str,
     logger: RunLogger,
+    quick: bool = False,
 ) -> dict:
     """Run company research and role analysis agents in parallel.
 
     Returns dict with keys: company_research, role_analysis.
     If one agent fails, the other still returns its result.
+    quick=True skips web searches — analysis is JD-only, faster and cheaper.
     """
 
     def _run_company():
@@ -120,6 +122,7 @@ def run_parallel_research(
                 client, SYSTEM_PROMPT,
                 STEP_COMPANY_RESEARCH.format(job_description=job_description),
                 metrics=metrics, step_name="company_research",
+                exclude_tools=["web_search", "generate_pdf"] if quick else ["generate_pdf"],
             )
             metrics.finish()
             print(metrics.summary_line())
@@ -136,6 +139,7 @@ def run_parallel_research(
                 client, SYSTEM_PROMPT,
                 STEP_ROLE_ANALYSIS.format(job_description=job_description),
                 metrics=metrics, step_name="role_analysis",
+                exclude_tools=["web_search", "generate_pdf"] if quick else ["generate_pdf"],
             )
             metrics.finish()
             print(metrics.summary_line())
