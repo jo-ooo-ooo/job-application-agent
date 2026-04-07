@@ -229,7 +229,11 @@ def main():
 
         # ── Gap Questions: Ask user about potential missing experience ──
         user_answers = None
-        if not args.quick:
+        if args.quick:
+            questions = _extract_questions(state["gap_analysis"])
+            if questions:
+                print(f"\n  [quick] {len(questions)} gap question(s) skipped — re-run without --quick to answer them.")
+        else:
             user_answers = _handle_gap_questions(client, state, master_list_path, logger)
 
         # ── Re-assess if we learned new info ──────────────────────
@@ -913,7 +917,7 @@ def _build_pdf_filenames(candidate_name: str, state: dict) -> tuple[str, str]:
     # ── Company name ──────────────────────────────────────────────────────────
     # Best source: company_research — the model writes "**Company:** Name, ..."
     # Match both "- Company:" and "- **Company:**" (bold markdown) variants.
-    m = re.search(r'[-*]\s*\**Company:\**\s*\[?([A-Za-z0-9][A-Za-z0-9 .&\'-]{1,40}?)(?:\*{0,2}\s*[,\(\[]|\*{0,2}\s*$)', research, re.MULTILINE)
+    m = re.search(r'[-*]\s*\**Company:\**\s*\[?([A-Za-z0-9][A-Za-z0-9 .&\'-]{1,40}?)(?:\*{0,2}\s*[,\(\[|]|\*{0,2}\s*$)', research, re.MULTILINE)
     if m:
         company = m.group(1).strip()
 
