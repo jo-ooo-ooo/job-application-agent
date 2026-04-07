@@ -80,6 +80,20 @@ def _word_count(text: str) -> int:
     return len(text.split()) if text else 0
 
 
+def _is_critic_approved(review: str) -> bool:
+    """Determine if critic approved by checking the first non-empty line.
+
+    Requires the first non-empty line to start with 'APPROVED' (case-insensitive)
+    and not contain 'REVISIONS' — avoids false positives when 'approved' appears
+    in body text.
+    """
+    for line in review.strip().split("\n"):
+        line = line.strip()
+        if line:
+            return line.upper().startswith("APPROVED") and "REVISION" not in line.upper()
+    return False
+
+
 def _extract_revision_issues(review: str) -> list[str]:
     """Extract individual revision items from critic feedback.
 
@@ -94,7 +108,8 @@ def _extract_revision_issues(review: str) -> list[str]:
     for line in review.split("\n"):
         line = line.strip()
         # Match bullet or numbered list items containing CV: or Cover Letter:
-        m = re.match(r'^(?:[-*]|\d+[.)])\s*\**\s*((?:CV|Cover\s*Letter)\s*:\s*.+)', line, re.IGNORECASE)
+        # Require actual content (\S) after the colon — avoids matching section headers like "CV:"
+        m = re.match(r'^(?:[-*]|\d+[.)])\s*\**\s*((?:CV|Cover\s*Letter)\s*:\s*\S.+)', line, re.IGNORECASE)
         if m:
             # Clean up bold markers
             issue = m.group(1).replace("**", "").strip()
@@ -233,7 +248,7 @@ def run_critic_loop(
         )
         logger.finish_step()
 
-        is_approved = "APPROVED" in review and "REVISIONS" not in review
+        is_approved = _is_critic_approved(review)
         issues = [] if is_approved else _extract_revision_issues(review)
 
         # Print the critic's feedback

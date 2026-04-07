@@ -971,28 +971,42 @@ def _strip_code_fences(text: str) -> str:
 
 
 def _extract_section(text: str, section_name: str, fallback: str) -> str:
-    """Extract a section from revision output by looking for markdown headers."""
-    markers = {
-        "CV": ["# CV", "## CV", "# Revised CV", "## Revised CV"],
-        "Cover Letter": ["# Cover Letter", "## Cover Letter", "# Revised Cover Letter", "## Revised Cover Letter"],
+    """Extract a section from revision output by looking for markdown headers.
+
+    Returns only the CONTENT after the header, not the header itself.
+    Uses case-insensitive matching to handle REVISED CV / Revised CV variants.
+    """
+    import re as _re
+
+    patterns = {
+        "CV": r'^#{1,3}\s+(?:REVISED\s+)?CV\s*$',
+        "Cover Letter": r'^#{1,3}\s+(?:REVISED\s+)?COVER\s+LETTER\s*$',
     }
+    other_patterns = {k: v for k, v in patterns.items() if k != section_name}
 
-    search_markers = markers.get(section_name, [])
-    other_markers = [m for name, mlist in markers.items() if name != section_name for m in mlist]
+    pattern = patterns.get(section_name)
+    if not pattern:
+        return fallback
 
-    for marker in search_markers:
-        idx = text.find(marker)
-        if idx == -1:
-            continue
-        content = text[idx:]
-        end = len(content)
-        for other in other_markers:
-            other_idx = content.find(other, len(marker))
-            if other_idx != -1:
-                end = min(end, other_idx)
-        return content[:end].strip()
+    lines = text.split("\n")
+    start_line = None
+    for i, line in enumerate(lines):
+        if _re.match(pattern, line.strip(), _re.IGNORECASE):
+            start_line = i + 1  # content starts after the header line
+            break
 
-    return fallback
+    if start_line is None:
+        return fallback
+
+    # Find the next section header to know where to stop
+    end_line = len(lines)
+    for other_pattern in other_patterns.values():
+        for j in range(start_line, len(lines)):
+            if _re.match(other_pattern, lines[j].strip(), _re.IGNORECASE):
+                end_line = min(end_line, j)
+                break
+
+    return "\n".join(lines[start_line:end_line]).strip()
 
 
 if __name__ == "__main__":

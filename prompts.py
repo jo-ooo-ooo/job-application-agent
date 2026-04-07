@@ -326,6 +326,21 @@ Output ONLY the cover letter markdown. No commentary.
 STEP_CRITIC_REVIEW = """\
 You are a hiring manager reviewing this application. Be specific and actionable.
 
+⚠ CRITICAL OUTPUT FORMAT — your ENTIRE response must be ONE of these two options:
+
+Option A — if BOTH documents are ready to send:
+APPROVED
+
+Option B — if there are specific issues:
+REVISIONS NEEDED:
+- CV: [specific issue and fix]
+- Cover Letter: [specific issue and fix]
+
+NO other text. No preamble, no analysis, no summary, no score. Start your response
+with either "APPROVED" or "REVISIONS NEEDED:" — nothing before it.
+
+---
+
 JOB DESCRIPTION:
 {job_description}
 
@@ -338,8 +353,7 @@ CV (structured data — review the content, not the format):
 COVER LETTER:
 {cover_letter_markdown}
 
-Review both documents as if you're deciding whether to interview this candidate.
-Check for:
+Review as a hiring manager deciding whether to interview this candidate:
 1. Are the must-have skills from the role analysis clearly visible?
 2. Are key signals/keywords present for ATS?
 3. Is the most relevant experience given the most space?
@@ -347,16 +361,7 @@ Check for:
 5. Does the cover letter show genuine understanding of the company?
 6. Is anything misleading, generic, or buried that should be prominent?
 
-If BOTH documents are strong enough to get an interview, respond with exactly:
-APPROVED
-
-Otherwise, give specific revision instructions. Be direct:
-REVISIONS NEEDED:
-- CV: [specific issue and how to fix it]
-- CV: [another issue]
-- Cover Letter: [specific issue and how to fix it]
-
-Max 5 revision items. Focus on what would actually change the hiring decision.
+Max 5 revision items. Focus only on what would change the hiring decision.
 Do NOT nitpick formatting or style. Focus on substance and positioning.
 """
 
