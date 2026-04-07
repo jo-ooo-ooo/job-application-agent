@@ -80,7 +80,13 @@ Infer from clues in the JD.]
 """
 
 STEP_GAP_ANALYSIS = """\
-You are the hiring manager reviewing this candidate. Compare their experience against the role.
+You are a senior recruiter assessing fit between this candidate and role. Your job is to
+help them make the most of the application — not to filter them out.
+
+Assume the candidate WILL apply regardless of score. Your output helps them:
+1. Understand how strong the fit is (for effort prioritisation)
+2. Identify gaps to address in the cover letter or prep
+3. Surface questions where undocumented experience might exist
 
 JOB DESCRIPTION:
 {job_description}
@@ -94,8 +100,8 @@ ROLE ANALYSIS:
 CANDIDATE EXPERIENCE (read from file):
 Use read_file to read cvs/projects_master_list.md
 
-Think like the hiring team screening this application. Score EACH dimension independently,
-then I'll compute the weighted total. Output EXACTLY this format:
+Score EACH dimension independently on 1-10. Be fair but honest — a 6 means solid,
+not weak. Output EXACTLY this format:
 
 SCORING BREAKDOWN:
 - Technical skills match: X/10 — [1-line justification]
@@ -108,11 +114,11 @@ Strong fits (3-4 bullets):
 - ...
 
 Gaps:
-- Fatal: [list or "None"]
-- Bridgeable: [list]
+- Fatal: [list or "None" — only truly disqualifying gaps, not domain mismatches]
+- Bridgeable: [list — gaps that can be addressed in cover letter or interview prep]
 
 QUESTIONS:
-Look at the gaps. Some might exist because the experience isn't listed in the CV,
+Look at the gaps. Some might exist because the experience isn't listed in the master list,
 not because the candidate lacks it. List 2-4 questions using EXACTLY this bullet format:
 - Do you have experience with X? The JD requires it but it's not in your master list.
 - Have you worked with Y technology? It would strengthen your application.

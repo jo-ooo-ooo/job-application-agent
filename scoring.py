@@ -3,7 +3,7 @@
 The model scores each dimension independently. This module:
 1. Parses the scores from the model's output
 2. Computes a deterministic weighted total
-3. Determines the recommendation (STRONG APPLY / APPLY / STRATEGIC APPLY / SKIP)
+3. Determines the recommendation (STRONG APPLY / APPLY / LIGHT APPLY / SKIP)
 """
 
 import re
@@ -20,10 +20,10 @@ DIMENSION_WEIGHTS = {
 
 # Score → recommendation thresholds
 THRESHOLDS = {
-    "STRONG APPLY": 80,
-    "APPLY": 60,
-    "STRATEGIC APPLY": 50,
-    "SKIP": 0,
+    "STRONG APPLY": 75,   # Great fit — full effort, prioritise
+    "APPLY": 55,          # Good enough — standard run
+    "LIGHT APPLY": 35,    # Stretch/reach — use --quick, address gaps in cover letter
+    "SKIP": 0,            # Genuinely wrong fit (wrong level, wrong function entirely)
 }
 
 # Map dimension label variations to standard keys
@@ -111,15 +111,15 @@ def get_recommendation(score: float) -> str:
         return "STRONG APPLY"
     elif score >= THRESHOLDS["APPLY"]:
         return "APPLY"
-    elif score >= THRESHOLDS["STRATEGIC APPLY"]:
-        return "STRATEGIC APPLY"
+    elif score >= THRESHOLDS["LIGHT APPLY"]:
+        return "LIGHT APPLY"
     else:
         return "SKIP"
 
 
 def is_borderline(score: float) -> bool:
     """Check if the score is in the borderline range that warrants re-assessment."""
-    return 45 <= score <= 65
+    return 40 <= score <= 60
 
 
 def format_score_summary(dimension_scores: dict, weighted_score: float, recommendation: str) -> str:

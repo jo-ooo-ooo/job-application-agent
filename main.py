@@ -276,7 +276,7 @@ def main():
         print(state["gap_analysis"])
         # Re-derive score for the gate display
         score = state.get("final_score") or 50.0
-        recommendation = state.get("final_recommendation") or "STRATEGIC APPLY"
+        recommendation = state.get("final_recommendation") or "LIGHT APPLY"
         if not state.get("final_score"):
             gap_text = state["gap_analysis"]
             # Prefer scores from the updated section if a reassessment happened
@@ -611,7 +611,7 @@ def main():
 
     # ── Log to Google Sheets via MCP ──────────────────────────
     final_score = state.get("final_score", 50.0)
-    final_recommendation = state.get("final_recommendation", "STRATEGIC APPLY")
+    final_recommendation = state.get("final_recommendation", "LIGHT APPLY")
     sheets.log_application(run_id, state, final_score, final_recommendation)
 
     # ── Run Summary ───────────────────────────────────────────
@@ -646,7 +646,7 @@ def _run_gap_analysis(client, state, logger):
     dimension_scores = parse_dimension_scores(state["gap_analysis"])
     if not dimension_scores:
         print("  [warning] Could not parse dimension scores. Using default 50/100.")
-        return 50.0, "STRATEGIC APPLY"
+        return 50.0, "LIGHT APPLY"
 
     score = compute_weighted_score(dimension_scores)
     recommendation = get_recommendation(score)
@@ -711,13 +711,29 @@ def _handle_gap_questions(client, state, master_list_path, logger=None):
     print()
 
     import sys
+
+    # Open /dev/tty directly so we always read from the real terminal,
+    # regardless of how stdin may have been consumed by earlier steps.
+    try:
+        _tty = open("/dev/tty", "r")
+    except OSError:
+        _tty = sys.stdin  # fallback (e.g. Windows or non-interactive)
+
+    def _read_answer(prompt: str) -> str:
+        sys.stdout.write(prompt)
+        sys.stdout.flush()
+        try:
+            return _tty.readline().rstrip("\n").strip()
+        except EOFError:
+            return ""
+
     answers = []
     for i, question in enumerate(questions, 1):
         print(f"  ── Question {i}/{len(questions)} ──")
         print(f"  {question}")
         sys.stdout.flush()
         try:
-            answer = input("  Your answer (or Enter to skip): ").strip()
+            answer = _read_answer("  Your answer (or Enter to skip): ")
         except EOFError:
             print("\n  [warning] stdin closed — skipping remaining questions.")
             break
@@ -728,6 +744,9 @@ def _handle_gap_questions(client, state, master_list_path, logger=None):
             print(f"  ✓ Saved.\n")
         else:
             print(f"  — Skipped.\n")
+
+    if _tty is not sys.stdin:
+        _tty.close()
 
     if not answers:
         print("  No answers provided — master list unchanged.")
