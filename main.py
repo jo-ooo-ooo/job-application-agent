@@ -64,7 +64,33 @@ def main():
     parser.add_argument("--model", type=str, default=None, help="Model override: haiku, sonnet, opus (default: sonnet)")
     parser.add_argument("--quick", action="store_true", help="Fast mode: skip web search, gap questions, cover letter, and cap critic at 1 round")
     parser.add_argument("--no-cover-letter", action="store_true", dest="no_cover_letter", help="Skip cover letter generation and PDF")
+    parser.add_argument(
+        "--log-outcome",
+        nargs=2,
+        metavar=("RUN_ID", "STATUS"),
+        help="Update application outcome: --log-outcome <run_id> applied|screening|interview|offer|rejected",
+    )
     args = parser.parse_args()
+
+    if args.log_outcome:
+        run_id, status = args.log_outcome
+        valid = {"applied", "screening", "interview", "offer", "rejected"}
+        if status not in valid:
+            print(f"Error: invalid status '{status}'. Valid: {', '.join(sorted(valid))}")
+            sys.exit(1)
+        from db import create_tables, update_application, get_application
+        create_tables()
+        if not get_application(run_id):
+            print(f"Error: application '{run_id}' not found in database.")
+            print("Run 'python3 migrate.py' first if this is an older checkpoint.")
+            sys.exit(1)
+        extra = {}
+        if status == "applied":
+            from datetime import datetime as _dt
+            extra["applied_at"] = _dt.now().isoformat()
+        update_application(run_id, status=status, **extra)
+        print(f"✓ {run_id} → {status}")
+        sys.exit(0)
 
     # --quick implies --no-cover-letter
     if args.quick:
