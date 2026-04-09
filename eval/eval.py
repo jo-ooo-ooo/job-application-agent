@@ -506,7 +506,7 @@ def _save_eval_results(all_checks, logger, label=None, outputs=None):
 
     data = {
         "timestamp": datetime.now().isoformat(),
-        "model": agent.MODEL,
+        "model": getattr(agent, "MODEL", agent._DEFAULT_MODEL),
         "total_cost_usd": round(logger.total_cost, 5),
         "total_input_tokens": logger.total_input_tokens,
         "total_output_tokens": logger.total_output_tokens,

@@ -1,0 +1,280 @@
+
+EVAL: Running full pipeline on 7 JDs
+============================================================
+
+--- jd_1: Go-to-Market Lead - Miro Engage
+
+Company: Miro
+Location: Berlin, EMEA
+Seniority... ---
+  [jd_1] Running company_research...
+  [tool] web_search(query='Miro company funding stage size valuation') -> 63 chars
+  [tool] web_search(query='Miro Go-to-Market Lead Miro Workshops role salary compens...') -> 84 chars
+  [tool] web_search(query='Miro recent news 2024 product launches funding') -> 68 chars
+  [tool] web_search(query='Miro whiteboard collaboration platform company') -> 68 chars
+  [tool] web_search(query='Miro Series C funding valuation unicorn') -> 61 chars
+  6,026 in / 712 out | $0.0077 | 12.6s, tools: 5
+  [jd_1] Running role_analysis...
+  1,791 in / 622 out | $0.0039 | 10.7s
+  [jd_1] Running gap_analysis...
+  [tool] read_file(path='cvs/projects_master_list.md') -> 31692 chars
+  13,265 in / 1,533 out | $0.0167 | 22.4s, tools: 1
+  [jd_1] Running cover_letter...
+  [tool] read_file(path='cvs/template_standard.md') -> 835 chars
+  [tool] web_search(query='Miro Workshops product 2024 2025 launch GTM strategy') -> 74 chars
+  [tool] web_search(query='Miro "Miro Workshops" product feature 2024') -> 64 chars
+  [tool] web_search(query='Miro collaborative whiteboard company strategy 2025 enter...') -> 84 chars
+  [tool] web_search(query='Miro board product 2025 enterprise GTM') -> 60 chars
+  [tool] generate_pdf(content='# Joyce Chen\nytchen37@gmail.com | +49 160 4629745 | Berli...', filename='cover_letter_joyce_chen_miro_gtm_lead.pdf') -> 130 chars
+  21,684 in / 1,625 out | $0.0894 | 36.3s, tools: 6
+    Score parse success       0/5  0/5 dimensions parsed
+    CL word count             487/500  487 words (OK)
+    JD keyword match          28/100  43/156 JD keywords in cover letter (28%)
+    Company research completeness 4/4  4/4 sections: Company:, Role:, Compensation, Notable
+    Role analysis completeness 4/4  4/4 sections: MUST-HAVE, NICE-TO-HAVE, KEY SIGNAL, ROLE TYPE
+    Critic loop               0/3  No critic data
+    CL guardrail              1/1  Passed
+
+--- jd_2: Lead Product Manager - Hailables at Uber
+
+Company: Uber
+Location: Amsterdam, Nor... ---
+  [jd_2] Running company_research...
+  [tool] web_search(query='Uber Hailables product manager role Amsterdam') -> 67 chars
+  [tool] web_search(query='Uber company size funding stage 2024') -> 58 chars
+  [tool] web_search(query='Uber Hailables taxi integration program') -> 61 chars
+  [tool] web_search(query='Uber company overview 2024 public company') -> 63 chars
+  5,628 in / 622 out | $0.0070 | 9.9s, tools: 4
+  [jd_2] Running role_analysis...
+  [tool] web_search(query='Uber Hailables program taxi integration marketplace') -> 73 chars
+  [tool] web_search(query='Autocab Uber partnership fleet integration') -> 64 chars
+  3,664 in / 845 out | $0.0063 | 11.7s, tools: 2
+  [jd_2] Running gap_analysis...
+  [tool] read_file(path='cvs/projects_master_list.md') -> 31692 chars
+  13,283 in / 1,222 out | $0.0155 | 17.3s, tools: 1
+  [jd_2] Running cover_letter...
+  [tool] read_file(path='cvs/template_standard.md') -> 835 chars
+  [tool] web_search(query='Uber Hailables program taxi integration strategy EMEA 202...') -> 85 chars
+  [tool] web_search(query='Uber Hailables taxi street hail marketplace Autocab integ...') -> 85 chars
+  [tool] web_search(query='Uber taxi integration Europe Autocab fleet third party su...') -> 88 chars
+  [tool] generate_pdf(content='# Cover Letter — Joyce Chen\n**ytchen37@gmail.com** | +49 ...', filename='cover_letter_joyce_chen_uber_hailables.pdf') -> 131 chars
+  19,345 in / 1,219 out | $0.0763 | 32.2s, tools: 5
+    Score parse success       0/5  0/5 dimensions parsed
+    CL word count             163/500  163 words (OK)
+    JD keyword match          8/100  11/133 JD keywords in cover letter (8%)
+    Company research completeness 4/4  4/4 sections: Company:, Role:, Compensation, Notable
+    Role analysis completeness 4/4  4/4 sections: MUST-HAVE, NICE-TO-HAVE, KEY SIGNAL, ROLE TYPE
+    Critic loop               0/3  No critic data
+    CL guardrail              0/1  Cover letter does not contain the candidate's name ('Joyce C
+
+--- jd_3: Senior CRO & Growth Experimentation Manager - Lingoda GmbH
+
+Company: Lingoda Gmb... ---
+  [jd_3] Running company_research...
+  [tool] web_search(query='Lingoda GmbH company funding stage size') -> 61 chars
+  [tool] web_search(query='Lingoda language learning platform Berlin recent news 2024') -> 80 chars
+  [tool] web_search(query='Lingoda online language learning') -> 54 chars
+  [tool] web_search(query='"Lingoda" Berlin startup funding') -> 54 chars
+  [tool] web_search(query='Lingoda language classes') -> 46 chars
+  [tool] web_search(query='Lingoda CRO experimentation role salary') -> 61 chars
+  8,084 in / 674 out | $0.0092 | 10.4s, tools: 6
+  [jd_3] Running role_analysis...
+  [tool] web_search(query='Lingoda GmbH business model subscription language learning') -> 80 chars
+  [tool] web_search(query='CRO experimentation manager role responsibilities 2024') -> 76 chars
+  3,757 in / 1,035 out | $0.0071 | 12.9s, tools: 2
+  [jd_3] Running gap_analysis...
+  [tool] read_file(path='cvs/projects_master_list.md') -> 31692 chars
+  13,623 in / 1,188 out | $0.0157 | 16.1s, tools: 1
+  [jd_3] Running cover_letter...
+  [tool] read_file(path='cvs/template_standard.md') -> 835 chars
+  [tool] generate_pdf(content='# Joyce Chen\n\nytchen37@gmail.com | +49 160 4629745 | Berl...', filename='cover_letter_lingoda.pdf') -> 113 chars
+  10,916 in / 1,440 out | $0.0543 | 27.6s, tools: 2
+    Score parse success       0/5  0/5 dimensions parsed
+    CL word count             460/500  460 words (OK)
+    JD keyword match          28/100  41/147 JD keywords in cover letter (28%)
+    Company research completeness 4/4  4/4 sections: Company:, Role:, Compensation, Notable
+    Role analysis completeness 4/4  4/4 sections: MUST-HAVE, NICE-TO-HAVE, KEY SIGNAL, ROLE TYPE
+    Critic loop               0/3  No critic data
+    CL guardrail              1/1  Passed
+
+--- jd_4: Senior Product Manager at Tripadvisor
+
+Company: Tripadvisor
+Location: Remote pos... ---
+  [jd_4] Running company_research...
+  [tool] web_search(query='Tripadvisor company size revenue business 2024') -> 68 chars
+  [tool] web_search(query='Tripadvisor Senior Product Manager salary compensation UK') -> 79 chars
+  [tool] web_search(query='Tripadvisor Experiences team product strategy recent news') -> 79 chars
+  [tool] web_search(query='Tripadvisor company overview what does it do') -> 66 chars
+  [tool] web_search(query='Tripadvisor hiring remote UK Poland Portugal visa sponsor...') -> 83 chars
+  5,809 in / 637 out | $0.0072 | 9.5s, tools: 5
+  [jd_4] Running role_analysis...
+  [tool] web_search(query='Tripadvisor Experiences team product strategy 2024') -> 72 chars
+  [tool] web_search(query='Tripadvisor product manager salary level seniority') -> 72 chars
+  3,656 in / 914 out | $0.0066 | 11.1s, tools: 2
+  [jd_4] Running gap_analysis...
+  [tool] read_file(path='cvs/projects_master_list.md') -> 31692 chars
+  13,292 in / 2,019 out | $0.0187 | 26.4s, tools: 1
+  [jd_4] Running cover_letter...
+  [tool] read_file(path='cvs/template_standard.md') -> 835 chars
+  [tool] generate_pdf(content='# Joyce Chen\n\nytchen37@gmail.com · linkedin.com/in/yuntzu...', filename='cover_letter_tripadvisor_spm.pdf') -> 121 chars
+  13,260 in / 944 out | $0.0539 | 24.5s, tools: 2
+    Score parse success       0/5  0/5 dimensions parsed
+    CL word count             158/500  158 words (OK)
+    JD keyword match          15/100  19/131 JD keywords in cover letter (15%)
+    Company research completeness 4/4  4/4 sections: Company:, Role:, Compensation, Notable
+    Role analysis completeness 4/4  4/4 sections: MUST-HAVE, NICE-TO-HAVE, KEY SIGNAL, ROLE TYPE
+    Critic loop               0/3  No critic data
+    CL guardrail              0/1  Cover letter does not contain the candidate's name ('Joyce C
+
+--- pm_ai_platform: Senior Product Manager, AI Features — Synthos
+
+About Synthos
+Synthos builds the... ---
+  [pm_ai_platform] Running company_research...
+  [tool] web_search(query='Synthos AI platform Series C funding') -> 58 chars
+  [tool] web_search(query='Synthos company news product updates 2024') -> 63 chars
+  [tool] web_search(query='Synthos knowledge management AI') -> 53 chars
+  [tool] web_search(query='"Synthos" startup Notion Copilot') -> 54 chars
+  5,832 in / 557 out | $0.0069 | 9.5s, tools: 4
+  [pm_ai_platform] Running role_analysis...
+  [tool] web_search(query='Synthos AI platform Series C funding knowledge workers') -> 76 chars
+  [tool] web_search(query='Senior Product Manager AI features requirements RAG embed...') -> 84 chars
+  3,809 in / 841 out | $0.0064 | 11.6s, tools: 2
+  [pm_ai_platform] Running gap_analysis...
+  [tool] read_file(path='cvs/projects_master_list.md') -> 0 chars
+  [tool] read_file(path='cvs/template_standard.md') -> 835 chars
+  [tool] read_file(path='projects_master_list.md') -> 46 chars
+  [tool] read_file(path='cvs/projects_master_list.md') -> 31692 chars
+  24,548 in / 1,513 out | $0.0257 | 28.6s, tools: 4
+  [pm_ai_platform] Running cover_letter...
+  [tool] read_file(path='cvs/template_standard.md') -> 835 chars
+  [tool] generate_pdf(content='# Cover Letter — Joyce Chen\n**Senior Product Manager, AI ...', filename='cover_letter_synthos_joyce_chen.pdf') -> 124 chars
+  11,269 in / 1,380 out | $0.0545 | 28.2s, tools: 2
+    Score parse success       0/5  0/5 dimensions parsed
+    CL word count             484/500  484 words (OK)
+    JD keyword match          38/100  53/140 JD keywords in cover letter (38%)
+    Company research completeness 4/4  4/4 sections: Company:, Role:, Compensation, Notable
+    Role analysis completeness 4/4  4/4 sections: MUST-HAVE, NICE-TO-HAVE, KEY SIGNAL, ROLE TYPE
+    Critic loop               0/3  No critic data
+    CL guardrail              1/1  Passed
+
+--- pm_enterprise_saas: Senior Product Manager — Meridian HR
+
+About Meridian
+Meridian is an enterprise H... ---
+  [pm_enterprise_saas] Running company_research...
+  [tool] web_search(query='Meridian HR Series D funding enterprise platform') -> 70 chars
+  [tool] web_search(query='Meridian HR compliance reporting product reviews') -> 70 chars
+  [tool] web_search(query='Meridian HR company news recent funding 2024') -> 66 chars
+  [tool] web_search(query='Meridian HR software company') -> 50 chars
+  [tool] web_search(query='"Meridian HR" enterprise workforce planning') -> 65 chars
+  6,098 in / 649 out | $0.0075 | 11.0s, tools: 5
+  [pm_enterprise_saas] Running role_analysis...
+  1,829 in / 732 out | $0.0044 | 9.4s
+  [pm_enterprise_saas] Running gap_analysis...
+  [tool] read_file(path='cvs/projects_master_list.md') -> 31692 chars
+  13,464 in / 1,303 out | $0.0160 | 17.1s, tools: 1
+  [pm_enterprise_saas] Running cover_letter...
+  [tool] read_file(path='cvs/template_standard.md') -> 835 chars
+  [tool] generate_pdf(content='# Joyce Chen\nytchen37@gmail.com | linkedin.com/in/yuntzuc...', filename='cover_letter_meridian_hr.pdf') -> 117 chars
+  11,567 in / 993 out | $0.0496 | 25.9s, tools: 2
+    Score parse success       0/5  0/5 dimensions parsed
+    CL word count             182/500  182 words (OK)
+    JD keyword match          16/100  22/141 JD keywords in cover letter (16%)
+    Company research completeness 4/4  4/4 sections: Company:, Role:, Compensation, Notable
+    Role analysis completeness 4/4  4/4 sections: MUST-HAVE, NICE-TO-HAVE, KEY SIGNAL, ROLE TYPE
+    Critic loop               0/3  No critic data
+    CL guardrail              0/1  Cover letter does not contain the candidate's name ('Joyce C
+
+--- pm_growth_consumer: Senior Product Manager, Growth — Kova
+
+About Kova
+Kova is a Series B consumer fi... ---
+  [pm_growth_consumer] Running company_research...
+  [tool] web_search(query='Kova fintech app Series B funding') -> 55 chars
+  [tool] web_search(query='Kova subscription tracker app news 2024') -> 61 chars
+  [tool] web_search(query='Kova app subscription management') -> 54 chars
+  [tool] web_search(query='"Kova" fintech London') -> 43 chars
+  5,948 in / 570 out | $0.0070 | 9.3s, tools: 4
+  [pm_growth_consumer] Running role_analysis...
+  1,833 in / 707 out | $0.0043 | 11.0s
+  [pm_growth_consumer] Running gap_analysis...
+  [tool] read_file(path='cvs/projects_master_list.md') -> 31692 chars
+  13,349 in / 1,338 out | $0.0160 | 19.4s, tools: 1
+  [pm_growth_consumer] Running cover_letter...
+  [tool] read_file(path='cvs/template_standard.md') -> 835 chars
+  7,134 in / 604 out | $0.0305 | 17.0s, tools: 1
+    Score parse success       0/5  0/5 dimensions parsed
+    CL word count             354/500  354 words (OK)
+    JD keyword match          36/100  55/152 JD keywords in cover letter (36%)
+    Company research completeness 4/4  4/4 sections: Company:, Role:, Compensation, Notable
+    Role analysis completeness 4/4  4/4 sections: MUST-HAVE, NICE-TO-HAVE, KEY SIGNAL, ROLE TYPE
+    Critic loop               0/3  No critic data
+    CL guardrail              1/1  Passed
+
+EVAL RESULTS — 7 jobs
+-------------------------------------------------------
+  Metric                            avg    min    max
+-------------------------------------------------------
+  Score parse success          0.0/5      0      0
+  CL word count                327      158    487
+  JD keyword match             24%       8%    38%
+  Company research completeness 4        4      4
+  Role analysis completeness   4        4      4
+  Critic loop                  0        0      0
+  CL guardrail                 4/    7     -      -
+-------------------------------------------------------
+
+============================================================
+RUN SUMMARY
+============================================================
+
+Step                              Tokens      Cost    Time
+------------------------------------------------------------
+  jd_1_company_research        6,026+712 $ 0.0077  12.6s
+  jd_1_role_analysis           1,791+622 $ 0.0039  10.7s
+  jd_1_gap_analysis         13,265+1,533 $ 0.0167  22.4s
+  jd_1_cover_letter         21,684+1,625 $ 0.0894  36.3s
+  jd_2_company_research        5,628+622 $ 0.0070   9.9s
+  jd_2_role_analysis           3,664+845 $ 0.0063  11.7s
+  jd_2_gap_analysis         13,283+1,222 $ 0.0155  17.3s
+  jd_2_cover_letter         19,345+1,219 $ 0.0763  32.2s
+  jd_3_company_research        8,084+674 $ 0.0092  10.4s
+  jd_3_role_analysis         3,757+1,035 $ 0.0071  12.9s
+  jd_3_gap_analysis         13,623+1,188 $ 0.0157  16.1s
+  jd_3_cover_letter         10,916+1,440 $ 0.0543  27.6s
+  jd_4_company_research        5,809+637 $ 0.0072   9.5s
+  jd_4_role_analysis           3,656+914 $ 0.0066  11.1s
+  jd_4_gap_analysis         13,292+2,019 $ 0.0187  26.4s
+  jd_4_cover_letter           13,260+944 $ 0.0539  24.5s
+  pm_ai_platform_company_research      5,832+557 $ 0.0069   9.5s
+  pm_ai_platform_role_analysis      3,809+841 $ 0.0064  11.6s
+  pm_ai_platform_gap_analysis   24,548+1,513 $ 0.0257  28.6s
+  pm_ai_platform_cover_letter   11,269+1,380 $ 0.0545  28.2s
+  pm_enterprise_saas_company_research      6,098+649 $ 0.0075  11.0s
+  pm_enterprise_saas_role_analysis      1,829+732 $ 0.0044   9.4s
+  pm_enterprise_saas_gap_analysis   13,464+1,303 $ 0.0160  17.1s
+  pm_enterprise_saas_cover_letter     11,567+993 $ 0.0496  25.9s
+  pm_growth_consumer_company_research      5,948+570 $ 0.0070   9.3s
+  pm_growth_consumer_role_analysis      1,833+707 $ 0.0043  11.0s
+  pm_growth_consumer_gap_analysis   13,349+1,338 $ 0.0160  19.4s
+  pm_growth_consumer_cover_letter      7,134+604 $ 0.0305  17.0s
+------------------------------------------------------------
+  TOTAL                   263,763+28,438 $ 0.6244 494.9s
+
+Run log saved to /Users/yuntzuchen/Documents/02_Side Projects/job-application-agent/logs/run_20260409_135511.json
+Traceback (most recent call last):
+  File "/Users/yuntzuchen/Documents/02_Side Projects/job-application-agent/eval/eval.py", line 582, in <module>
+    main()
+    ~~~~^^
+  File "/Users/yuntzuchen/Documents/02_Side Projects/job-application-agent/eval/eval.py", line 575, in main
+    eval_dataset(args.dataset, skip_judge=args.skip_judge)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yuntzuchen/Documents/02_Side Projects/job-application-agent/eval/eval.py", line 286, in eval_dataset
+    _save_eval_results(all_checks, logger, outputs=all_outputs)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yuntzuchen/Documents/02_Side Projects/job-application-agent/eval/eval.py", line 509, in _save_eval_results
+    "model": agent.MODEL,
+             ^^^^^^^^^^^
+AttributeError: module 'agent' has no attribute 'MODEL'
