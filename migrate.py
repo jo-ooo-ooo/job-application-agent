@@ -36,7 +36,12 @@ def migrate(dry_run: bool = False) -> None:
     ok = skipped = 0
     for meta in checkpoints:
         run_id = meta["run_id"]
-        data = load_checkpoint(run_id)
+        try:
+            data = load_checkpoint(run_id)
+        except Exception as exc:
+            print(f"  SKIP  {run_id} — error loading file: {exc}")
+            skipped += 1
+            continue
         if not data:
             print(f"  SKIP  {run_id} — failed to load file")
             skipped += 1
