@@ -3,8 +3,10 @@ cvs/
 output/
 logs/
 checkpoints/
-eval/jobs/
+# eval/jobs/ intentionally tracked — contains synthetic JD fixtures (no personal data)
 eval/results/
+# Allow experiment run logs to be committed
+!eval/results/*.txt
 .claude/
 __pycache__/
 *.pyc
