@@ -76,14 +76,13 @@ def guardrail_pass(state: dict, candidate_name: str = "") -> dict:
 
 
 def keyword_match(state: dict) -> dict:
-    """What % of JD keywords appear in the CV?"""
+    """What % of JD keywords appear in the cover letter?"""
     jd = state.get("job_description", "").lower()
-    cv = state.get("cv_markdown", "").lower()
+    cl = state.get("cover_letter_markdown", "").lower()
 
-    if not jd or not cv:
-        return {"name": "JD keyword match", "score": 0, "max_score": 100, "detail": "Missing JD or CV"}
+    if not jd or not cl:
+        return {"name": "JD keyword match", "score": 0, "max_score": 100, "detail": "Missing JD or cover letter"}
 
-    # Extract meaningful keywords from JD (3+ char words, skip common words)
     stop_words = {
         "the", "and", "for", "are", "with", "you", "our", "will", "this",
         "that", "from", "your", "have", "has", "been", "they", "their",
@@ -97,14 +96,14 @@ def keyword_match(state: dict) -> dict:
     if not jd_words:
         return {"name": "JD keyword match", "score": 0, "max_score": 100, "detail": "No keywords extracted"}
 
-    matched = sum(1 for w in jd_words if w in cv)
+    matched = sum(1 for w in jd_words if w in cl)
     pct = round(matched / len(jd_words) * 100)
 
     return {
         "name": "JD keyword match",
         "score": pct,
         "max_score": 100,
-        "detail": f"{matched}/{len(jd_words)} keywords ({pct}%)",
+        "detail": f"{matched}/{len(jd_words)} JD keywords in cover letter ({pct}%)",
     }
 
 
@@ -301,6 +300,7 @@ STEP_CHECKS = {
     "critic_loop": ["critic_loop_effectiveness"],
 }
 
+
 ALL_AUTOMATED = {
     "score_parse_success": score_parse_success,
     "cv_word_count": cv_word_count,
@@ -349,17 +349,32 @@ ALL_AUTOMATED["cl_guardrail"] = cl_guardrail
 # ── Runners ───────────────────────────────────────────────────
 
 def run_automated_checks(state: dict, candidate_name: str = "") -> list[dict]:
-    """Run all automated (free) checks. Returns list of result dicts."""
-    return [
-        score_parse_success(state),
-        cv_word_count(state),
-        cl_word_count(state),
-        guardrail_pass(state, candidate_name),
-        keyword_match(state),
-        company_research_completeness(state),
-        role_analysis_completeness(state),
-        critic_loop_effectiveness(state),
-    ]
+    """Run all automated (free) checks. Returns list of result dicts.
+
+    CV-specific checks are only run when cv_markdown or cv_json is present
+    in state — they are skipped in the eval pipeline which doesn't run
+    cv_construction.
+    """
+    results = []
+
+    # Always run these
+    results.append(score_parse_success(state))
+    results.append(cl_word_count(state))
+    results.append(keyword_match(state))
+    results.append(company_research_completeness(state))
+    results.append(role_analysis_completeness(state))
+    results.append(critic_loop_effectiveness(state))
+
+    # Only run CV checks when cv data is present
+    has_cv = bool(state.get("cv_markdown") or state.get("cv_json"))
+    if has_cv:
+        results.append(cv_word_count(state))
+        results.append(cv_guardrail(state, candidate_name))
+    else:
+        # Still run CL guardrail
+        results.append(cl_guardrail(state, candidate_name))
+
+    return results
 
 
 def run_judge_checks(client: anthropic.Anthropic, state: dict) -> list[dict]:
