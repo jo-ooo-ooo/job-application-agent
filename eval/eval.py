@@ -30,9 +30,8 @@ MODEL_SHORTCUTS = {"opus": "claude-opus-4-6", "sonnet": "claude-sonnet-4-6", "ha
 from prompts import (
     SYSTEM_PROMPT,
     STEP_COMPANY_RESEARCH,
+    STEP_ROLE_ANALYSIS,
     STEP_GAP_ANALYSIS,
-    STEP_PROJECT_SELECTION,
-    STEP_CV_CONSTRUCTION,
     STEP_COVER_LETTER,
 )
 from scoring import parse_dimension_scores, compute_weighted_score, get_recommendation
@@ -44,7 +43,9 @@ load_dotenv()
 
 EVAL_RESULTS_DIR = Path(__file__).parent / "results"
 
-# Steps in pipeline order, with their prompt template and required state keys
+# Steps that don't require the gitignored master list / scaffold.
+# cv_construction and project_selection are excluded — they need scaffold_json
+# which is parsed from cvs/projects_master_list.md (not committed).
 PIPELINE_STEPS = [
     {
         "name": "company_research",
@@ -53,27 +54,21 @@ PIPELINE_STEPS = [
         "output_key": "company_research",
     },
     {
+        "name": "role_analysis",
+        "prompt": STEP_ROLE_ANALYSIS,
+        "format_keys": ["job_description"],
+        "output_key": "role_analysis",
+    },
+    {
         "name": "gap_analysis",
         "prompt": STEP_GAP_ANALYSIS,
-        "format_keys": ["job_description", "company_research"],
+        "format_keys": ["job_description", "company_research", "role_analysis"],
         "output_key": "gap_analysis",
-    },
-    {
-        "name": "project_selection",
-        "prompt": STEP_PROJECT_SELECTION,
-        "format_keys": ["job_description", "company_research", "gap_analysis"],
-        "output_key": "project_selection",
-    },
-    {
-        "name": "cv_construction",
-        "prompt": STEP_CV_CONSTRUCTION,
-        "format_keys": ["job_description", "company_research", "project_selection", "manager_research"],
-        "output_key": "cv_markdown",
     },
     {
         "name": "cover_letter",
         "prompt": STEP_COVER_LETTER,
-        "format_keys": ["job_description", "company_research", "gap_analysis", "manager_research"],
+        "format_keys": ["job_description", "company_research", "gap_analysis"],
         "output_key": "cover_letter_markdown",
     },
 ]
@@ -169,12 +164,9 @@ def run_pipeline_for_jd(client, jd_text, jd_name, logger):
     """Run the full pipeline for a single JD. Returns state dict."""
     state = {
         "job_description": jd_text,
-        "manager_name": "",
         "company_research": "",
-        "manager_research": "No hiring manager specified — skipping.",
+        "role_analysis": "",
         "gap_analysis": "",
-        "project_selection": "",
-        "cv_markdown": "",
         "cover_letter_markdown": "",
     }
 
@@ -416,12 +408,9 @@ def _run_prerequisites(client, jd_text, target_step_index, jd_name, logger):
     """Run all pipeline steps before the target step to build up state."""
     state = {
         "job_description": jd_text,
-        "manager_name": "",
         "company_research": "",
-        "manager_research": "No hiring manager specified — skipping.",
+        "role_analysis": "",
         "gap_analysis": "",
-        "project_selection": "",
-        "cv_markdown": "",
         "cover_letter_markdown": "",
     }
 
