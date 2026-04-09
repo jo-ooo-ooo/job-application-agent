@@ -141,6 +141,9 @@ def upsert_application(
             "updated_at": now,
         },
     )
+    # Note: role and jd_url are not extracted from state here because the pipeline
+    # doesn't produce them. They are set later via update_application (e.g. from
+    # user input or the web UI).
     conn.commit()
     if close:
         conn.close()
@@ -229,6 +232,7 @@ def update_round(
     close = conn is None
     if conn is None:
         conn = get_db()
+    # Note: rounds table has no updated_at column (unlike applications).
     set_clause = ", ".join(f"{k} = :{k}" for k in updates)
     updates["id"] = round_id
     conn.execute(f"UPDATE rounds SET {set_clause} WHERE id = :id", updates)
