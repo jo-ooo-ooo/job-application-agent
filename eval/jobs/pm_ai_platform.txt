@@ -1,0 +1,32 @@
+Senior Product Manager, AI Features — Synthos
+
+About Synthos
+Synthos builds the AI layer for knowledge workers — a Series C platform ($120M raised, 800K users) that lets teams create, search, and act on company knowledge using LLMs. Think Notion meets Copilot, built for mid-market companies.
+
+The Role
+We need a Senior PM to define and ship AI-powered features across our core product surface. You'll work closely with our ML engineers and the Anthropic/OpenAI APIs to ship features that genuinely change how users work — not AI theatre.
+
+What you'll do
+- Define the product vision for AI features: smart search, auto-summarisation, AI-assisted editing, agent workflows
+- Collaborate with ML engineers to scope what's feasible given current model capabilities and latency constraints
+- Own the full feature lifecycle: discovery, spec, build, eval, launch, iterate
+- Design AI evaluation frameworks to measure output quality — not just engagement metrics
+- Work cross-functionally with sales and CS to understand enterprise buyer needs
+- Communicate clearly about AI limitations and model uncertainty to non-technical stakeholders
+
+What we're looking for
+Must-haves:
+- 5+ years product management experience
+- At least 1–2 years shipping AI or ML-powered features in a product role
+- Ability to hold a technical conversation with ML engineers (you don't code, but you understand tradeoffs)
+- Experience designing evaluation metrics for subjective outputs (LLM quality, retrieval relevance, etc.)
+- Strong product instinct for when AI adds genuine value vs. when it adds complexity
+
+Nice to have:
+- Experience with RAG, embeddings, or prompt engineering in a product context
+- Background in enterprise or B2B SaaS
+- Experience at a company that ships to developers or technical users
+
+Compensation: $160,000–$190,000 base + equity
+Location: San Francisco or Remote (US/Europe)
+Visa sponsorship: Yes

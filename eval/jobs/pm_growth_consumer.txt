@@ -1,0 +1,34 @@
+Senior Product Manager, Growth — Kova
+
+About Kova
+Kova is a Series B consumer fintech app (4M users, $35M raised) that helps people track recurring subscriptions, spot unused spend, and cancel in one tap. We're growing fast in the 18-35 demographic and are obsessed with turning sign-ups into activated, retained users.
+
+The Role
+We're looking for a Senior PM to own our growth loop — from first app open through the "aha moment" of first subscription cancelled. You'll work at the intersection of product, data, and marketing to design and ship experiments that move our activation and D7 retention metrics.
+
+What you'll do
+- Own the full activation funnel: onboarding, permission flows, first-value delivery
+- Run a continuous experimentation programme (10+ A/B tests per quarter)
+- Partner with data science to build user segmentation and behavioural models
+- Define and track north-star metrics; present weekly to founders and investors
+- Work with engineers (iOS/Android) and designers in 2-week sprints
+- Identify growth loops and virality mechanisms that compound over time
+
+What we're looking for
+Must-haves:
+- 5+ years product management experience, with at least 2 years on a consumer mobile product
+- Proven track record owning activation or retention funnels with measurable impact
+- Comfortable reading SQL and working directly with data (we don't gate analysis behind a data team)
+- Experience running and analysing A/B tests at scale
+- Strong written and verbal communication — you'll write the narrative, not just the deck
+
+Nice to have:
+- Experience at a high-growth startup (Series A–C stage)
+- Familiarity with subscription or fintech products
+- Experience with behavioural economics or nudge design
+
+We don't expect you to tick every box. If you're strong on the core and excited about the problem, we want to talk.
+
+Compensation: £80,000–£100,000 base + equity
+Location: London (hybrid, 2 days/week in office)
+Visa sponsorship: Yes, for the right candidate

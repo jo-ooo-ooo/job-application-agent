@@ -1,0 +1,33 @@
+Senior Product Manager — Meridian HR
+
+About Meridian
+Meridian is an enterprise HR platform (Series D, 2,000+ enterprise customers, 15M employees managed) used by Fortune 500 companies for workforce planning, compliance reporting, and benefits administration. We're a 10-year-old company modernising a legacy category.
+
+The Role
+We're hiring a Senior PM to own our compliance and reporting module — the product surface that enterprise HR directors and legal teams use to run mandatory regulatory reports (SOX, GDPR, EEOC). This is a high-stakes area where accuracy and auditability matter more than delight.
+
+What you'll do
+- Own the compliance reporting product area end-to-end: discovery, roadmap, delivery
+- Work directly with enterprise customers (F500 HR directors, legal ops) in deep discovery sessions
+- Partner with enterprise sales and solutions consultants to understand deal blockers and renewal risks
+- Define detailed functional specs for complex rule-based business logic (regulatory formulae, audit trails)
+- Manage a backlog across 3 engineering teams in a scaled Agile environment (SAFe)
+- Present roadmap and trade-offs to executive stakeholders (CPO, CRO)
+- Coordinate with external auditors and legal counsel on compliance requirements in 12 markets
+
+What we're looking for
+Must-haves:
+- 6+ years product management experience, with at least 3 years in enterprise B2B SaaS
+- Proven track record working with large enterprise customers (>5,000 employees) in a product role
+- Experience owning complex rule-based or compliance-adjacent products
+- Comfortable navigating large organisations and multiple internal stakeholders
+- Experience with SAFe or large-scale Agile delivery frameworks
+
+Nice to have:
+- Domain experience in HR, payroll, or compliance software
+- Experience in regulated industries (finance, healthcare, government)
+- MBA or legal background
+
+Compensation: $175,000–$205,000 base + bonus
+Location: New York or Chicago (3 days/week in office required)
+Visa sponsorship: No
