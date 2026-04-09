@@ -7,6 +7,7 @@ All routes return JSON. CORS is open (local-only tool, no auth needed).
 """
 
 import sys
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -26,7 +27,14 @@ from db import (
     get_rounds,
 )
 
-app = FastAPI(title="Job Application Agent", version="2.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    create_tables()
+    yield
+
+
+app = FastAPI(title="Job Application Agent", version="2.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -34,11 +42,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-def startup() -> None:
-    create_tables()
 
 
 # ── Request models ────────────────────────────────────────────
@@ -101,7 +104,7 @@ def patch_application(app_id: str, body: ApplicationUpdate) -> dict:
             detail=f"Invalid status '{body.status}'. Valid: {', '.join(sorted(valid_statuses))}",
         )
 
-    updates = {k: v for k, v in body.dict().items() if v is not None}
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if updates:
         update_application(app_id, **updates)
     return get_application(app_id)
@@ -139,7 +142,7 @@ def patch_round(app_id: str, round_id: str, body: RoundUpdate) -> dict:
     if not any(r["id"] == round_id for r in rounds):
         raise HTTPException(status_code=404, detail=f"Round '{round_id}' not found")
 
-    updates = {k: v for k, v in body.dict().items() if v is not None}
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if updates:
         update_round(round_id, **updates)
 
