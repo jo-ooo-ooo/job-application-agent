@@ -36,6 +36,18 @@ def save_checkpoint(run_id: str, state: dict, completed_steps: list[str], comple
     }
     path = CHECKPOINTS_DIR / f"{run_id}.json"
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    # Dual-write to DB — best-effort, never crashes the pipeline
+    try:
+        import db
+        conn = db.get_db(db.DB_PATH)
+        db.create_tables(conn)
+        db.upsert_application(run_id, state, created_at=data["timestamp"], conn=conn)
+        conn.close()
+    except Exception as e:
+        import sys
+        print(f"  [db] Warning: could not write to database: {e}", file=sys.stderr)
+
     return path
 
 

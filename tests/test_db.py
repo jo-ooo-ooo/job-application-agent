@@ -98,3 +98,29 @@ def test_old_checkpoint_state_keys_ignored(db_conn):
     upsert_application("run_old", old_state, conn=db_conn)
     app = get_application("run_old", conn=db_conn)
     assert app["company"] == "OldCo"
+
+
+def test_save_checkpoint_dual_writes_to_db(tmp_path, monkeypatch):
+    """save_checkpoint() must write both a .json file and a DB row."""
+    import db as db_module
+    test_db_path = tmp_path / "test.db"
+    monkeypatch.setattr(db_module, "DB_PATH", test_db_path)
+
+    from checkpoint import save_checkpoint, CHECKPOINTS_DIR
+    import checkpoint as cp_module
+    test_checkpoints = tmp_path / "checkpoints"
+    monkeypatch.setattr(cp_module, "CHECKPOINTS_DIR", test_checkpoints)
+
+    state = {"job_description": "PM at Acme", "company_research": "Company: Acme"}
+    save_checkpoint("run_test_dual", state, ["company_research"])
+
+    # File written
+    assert (test_checkpoints / "run_test_dual.json").exists()
+
+    # DB row written
+    conn = db_module.get_db(test_db_path)
+    db_module.create_tables(conn)
+    app = db_module.get_application("run_test_dual", conn=conn)
+    conn.close()
+    assert app is not None
+    assert app["company"] == "Acme"
