@@ -3,6 +3,7 @@ cvs/
 output/
 logs/
 checkpoints/
+data/
 # eval/jobs/ intentionally tracked — contains synthetic JD fixtures (no personal data)
 eval/results/
 # Allow experiment run logs to be committed
