@@ -266,9 +266,8 @@ def eval_dataset(dataset_dir, skip_judge=False):
         # Save key outputs for later comparison
         all_outputs[jd_name] = {
             "company_research": state.get("company_research", ""),
+            "role_analysis": state.get("role_analysis", ""),
             "gap_analysis": state.get("gap_analysis", ""),
-            "project_selection": state.get("project_selection", ""),
-            "cv_markdown": state.get("cv_markdown", ""),
             "cover_letter_markdown": state.get("cover_letter_markdown", ""),
         }
 
