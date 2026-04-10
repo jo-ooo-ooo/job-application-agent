@@ -4,7 +4,7 @@ An AI agent that takes a job description and produces a tailored CV and cover le
 
 Built as a PM exploring agent architecture hands-on — every production pattern (guardrails, checkpointing, evaluation, multi-agent coordination) was added to solve a real problem that came up during use.
 
-V2 extends the agent into a full application tracker: a SQLite database stores all runs, a REST API exposes them, and a DB MCP server gives Claude Desktop direct access to application context for mock interview sessions.
+V2 (in progress) extends the agent into a full application tracker: a SQLite database stores all runs, a REST API exposes them, and a DB MCP server gives Claude Desktop direct access to application context — JD, gap analysis, previous rounds — for mock interview prep sessions.
 
 ---
 

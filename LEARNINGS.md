@@ -196,9 +196,9 @@ The data model has two tables: `applications` (pipeline outputs, status, score) 
 
 For the interview prep loop, I decided against building a dedicated web UI. The practice loop is conversational — the agent asks a question, I answer, it coaches. Claude Desktop already does this natively.
 
-The decision: expose the SQLite database as an MCP server (`mcp_db_server.py`) and use Claude Desktop as the practice surface. When I say "I'm preparing for my Contentful interview," Claude calls the tools automatically, loads the full context — JD, gap analysis, previous rounds — and starts the session. Notes are stored back to the DB at the end, so the next round's prep builds on what happened in the previous one.
+The decision: expose the SQLite database as an MCP server (`mcp_db_server.py`) and use Claude Desktop as the practice surface. When I mention a company I'm interviewing at, Claude calls the tools automatically, loads the full context — JD, gap analysis, previous rounds — and starts the session. Notes are stored back to the DB at the end, so the next round's prep builds on what happened in the previous one.
 
-This is still in progress — the DB server is built and tested, Claude Desktop registration is the remaining step.
+**This is a work in progress.** The DB MCP server is built and tested. Claude Desktop registration is the remaining step before the full loop works end-to-end.
 
 ## What's next
 
