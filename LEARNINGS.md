@@ -159,11 +159,44 @@ The general lesson: never ask a model to rewrite a large file. Rewrite outputs a
 
 ---
 
+## v2: from CLI tool to application tracker
+
+The CLI is complete and works well. But managing 20+ applications at different stages — some waiting for reply, some in screening, some in interview — made the limitation clear: the CLI is stateless. There's no way to see all applications at once or navigate between them.
+
+V2 adds a data layer and begins building toward an interview prep agent.
+
+### SQLite data model alongside checkpoints
+
+Every pipeline run now dual-writes to `data/applications.db` (gitignored) alongside the existing JSON checkpoint files. Checkpoint files are unchanged — CLI resume still works. The DB write is best-effort (try/except) so a DB failure never crashes the pipeline.
+
+Two tables: `applications` (pipeline outputs, status, score) and `rounds` (interview prep, transcripts, notes per round).
+
+The key design decision: keep checkpoint files as the source of truth for the CLI, use the DB as the source of truth for everything that needs to query across runs. They're complementary, not competing.
+
+### FastAPI layer for the upcoming web UI
+
+A local REST API exposes the DB for the future web UI and interview prep tooling. All routes are local-only — no auth, open CORS. The API is thin: it just wraps `db.py` CRUD operations.
+
+### Interview prep via Claude Desktop MCP
+
+The most interesting architectural choice in v2: instead of building a separate practice UI, the interview prep loop runs entirely inside Claude Desktop using MCP.
+
+An MCP server (`mcp_db_server.py`) exposes six tools: list applications, find by company name, get full application context, get previous rounds, save prep notes, update notes after a session. Claude Desktop calls these automatically when the user says something like "I'm preparing for my Contentful interview."
+
+Why this works:
+- Claude already knows how to run mock interviews
+- The context loading (JD, gap analysis, previous rounds) happens via tool calls, not copy-paste
+- Session notes are stored back into the DB at the end — feeding cross-round continuity
+- No custom UI needed for the conversational practice loop
+
+The conversation surface is Claude Desktop. The persistence layer is SQLite. MCP is the bridge.
+
 ## What's next
 
-V4 (CV scaffold + hallucination prevention) is complete.
+V2 data model + API layer is complete. Interview prep via Claude Desktop MCP is partially built (DB server done, Claude Desktop registration pending).
 
-V5 directions:
-- **Interview prep agent** — deep research on interviewer, product, culture, and company strategy. Triggered when you get an interview invite and know the hiring manager's name.
-- **Multi-model routing** — use Haiku for cheap steps, Sonnet for core writing, Opus for complex analysis.
-- **Batch processing** — run against a saved jobs list from a spreadsheet.
+Next directions:
+- **Claude Desktop registration** — register `mcp_db_server.py` in Claude Desktop config to enable the full prep loop
+- **Interview prep agent** — structured prompting for HR screening, HM interview, case study prep. Each round type has different coaching logic.
+- **Cross-round continuity** — HR transcript → HM prep. The `rounds` table already supports this; the prep agent needs to read previous rounds before generating the next.
+- **Web UI** — minimal dashboard: application list, status, trigger prep, review outputs. Built on top of the existing FastAPI layer.

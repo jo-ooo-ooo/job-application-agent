@@ -21,11 +21,14 @@ Step 5: Cover letter — specific to company, addresses gaps honestly
      Guardrail auto-fix  [structural validation + model fix]
          |
 Step 6: PDF generation  [LaTeX via pdflatex, fpdf2 fallback]
+Step 7: Google Sheets log  [MCP → append row with score, recommendation, run_id]
          |
-Output: Candidate_Name_CV_Company_Role.pdf + Candidate_Name_Cover_Letter_Company_Role.pdf + Google Sheets log
+Output: Candidate_Name_CV_Company_Role.pdf + Candidate_Name_Cover_Letter_Company_Role.pdf
 ```
 
 Two human gates: after gap analysis (proceed?), and after seeing the CV/cover letter (approve, revise, or quit).
+
+All runs are stored in a local SQLite database (`data/applications.db`) alongside checkpoint files. A FastAPI layer exposes the data for the upcoming web UI and interview prep agent.
 
 ---
 
@@ -73,9 +76,33 @@ Requires TexLive: `brew install --cask mactex-no-gui`
 - Automated checks: word count, keyword match, guardrail pass, research completeness, critic effectiveness
 - LLM-as-judge scoring (Haiku): CV relevance, CL specificity, gap accuracy, research quality, role analysis quality
 
+### Data model
+
+All pipeline runs are persisted to a local SQLite database (`data/applications.db`, gitignored) alongside the existing JSON checkpoint files. The DB stores two tables: `applications` (full pipeline outputs, status, score) and `rounds` (interview prep, transcripts, notes). Checkpoint files are still written on every step for CLI resume support — the DB write is best-effort alongside them.
+
+`migrate.py` imports existing checkpoints into the DB on first setup.
+
+### FastAPI layer
+
+A local REST API (`api/app.py`) exposes the database for the upcoming web UI and interview prep tooling:
+
+- `GET /applications` — list all applications (summary fields)
+- `GET /applications/{id}` — full detail including rounds
+- `PATCH /applications/{id}` — update status, applied_at, role, jd_url
+- `POST /applications/{id}/rounds` — create an interview round
+- `PATCH /applications/{id}/rounds/{round_id}` — update round content
+
+Start with: `uvicorn api.app:app --port 8000`
+
 ### MCP integration
 
-Google Sheets logging via Model Context Protocol (MCP). The MCP server (`sheets_mcp_server.py`) runs as a subprocess with stdio transport. The client (`mcp_client.py`) discovers tools at runtime and calls `append_row` to log each application.
+Two MCP servers via stdio transport:
+
+**Google Sheets** (`sheets_mcp_server.py`) — logs each application to a tracking spreadsheet after CV generation. Called automatically by the pipeline.
+
+**Job Applications DB** (`mcp_db_server.py`) — exposes the SQLite database to Claude Desktop. Six tools: `list_jobs`, `find_application`, `get_application_detail`, `get_interview_rounds`, `save_prep_notes`, `update_prep_notes`. Enables Claude Desktop to run mock interview sessions with full application context — JD, gap analysis, previous round prep — loaded automatically.
+
+Register in `~/Library/Application Support/Claude/claude_desktop_config.json` to use with Claude Desktop.
 
 ---
 
@@ -115,6 +142,18 @@ python3 main.py --job "Senior PM at Acme Corp..."
 # Resume a crashed/interrupted run
 python3 main.py --resume
 
+# Update application status in DB
+python3 main.py --log-outcome <run_id> applied
+python3 main.py --log-outcome <run_id> screening
+python3 main.py --log-outcome <run_id> interview
+
+# Migrate existing checkpoints into SQLite DB (run once on first setup)
+python3 migrate.py --dry-run   # preview
+python3 migrate.py             # import
+
+# Start the local API
+uvicorn api.app:app --reload --port 8000
+
 # Evaluate output quality
 python3 eval/eval.py --logs
 python3 eval/eval.py --dataset eval/jobs/
@@ -129,7 +168,7 @@ python3 -m pytest tests/ -v
 ## Project structure
 
 ```
-main.py              Orchestration — pipeline, user gates, checkpointing
+main.py              Orchestration — pipeline, user gates, checkpointing, --log-outcome
 agent.py             Core agent loop — stateless steps, retry logic, tool execution
 agents.py            Multi-agent coordination — parallel research, critic loop
 prompts.py           All step prompts with {placeholders} for state injection
@@ -137,16 +176,20 @@ scoring.py           Decomposed scoring — parse dimensions, compute weighted t
 guardrails.py        Runtime validation + scaffold validation + auto-fix
 cv_scaffold.py       Parse master list into frozen facts (companies, projects, skills)
 run_logger.py        Per-step metrics (tokens, cost, latency, tools, retries)
-checkpoint.py        Save/load pipeline state for resume
+checkpoint.py        Save/load pipeline state for resume + dual-write to DB
 tools.py             Tool definitions (web_search, read_file, generate_pdf)
 cv_data.py           Structured CV data model (CVData, Experience, SideProject dataclasses)
 latex_generator.py   LaTeX PDF generation — Jinja2 rendering + pdflatex compilation
 pdf_generator.py     Markdown to PDF via fpdf2 (fallback)
+db.py                SQLite data model — Application + Round tables, CRUD
+migrate.py           One-time migration of existing checkpoints into SQLite DB
 mcp_client.py        MCP client for Google Sheets integration
-sheets_mcp_server.py MCP server — exposes append_row tool
+sheets_mcp_server.py MCP server — exposes append_row tool for Sheets logging
+mcp_db_server.py     MCP server — exposes DB tools for Claude Desktop interview prep
 
+api/app.py           FastAPI app — REST endpoints for applications and rounds
 templates/           LaTeX templates for CV and cover letter (Jake's Resume base)
-tests/               Unit tests (184 tests)
+tests/               Unit tests (200+ tests)
 eval/                Evaluation framework — automated checks + LLM-as-judge
 examples/            Example CV templates for setup
 ```

@@ -4,10 +4,11 @@ output/
 logs/
 checkpoints/
 data/
-# eval/jobs/ intentionally tracked — contains synthetic JD fixtures (no personal data)
+# eval/jobs/ intentionally tracked — only synthetic JD fixtures (no personal data)
+# Real job postings (jd_1.txt, jd_2.txt...) must never be committed — they reveal companies applied to
+eval/jobs/jd_*.txt
 eval/results/
-# Allow experiment run logs to be committed
-!eval/results/*.txt
+# eval/results/*.txt intentionally NOT allowed — results run against real JDs contain personal info
 .claude/
 __pycache__/
 *.pyc
