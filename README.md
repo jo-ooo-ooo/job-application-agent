@@ -1,8 +1,12 @@
 # Job Application Agent
 
-An AI agent that takes a job description and produces a tailored CV and cover letter. It researches the company, analyzes the role, scores fit, asks clarifying questions, and runs a writer/critic review loop before generating output.
+An end-to-end job application system built as an AI engineering portfolio project. It covers two stages:
 
-Built to explore how production-grade agent patterns (multi-agent coordination, adversarial review, guardrails, evaluation) apply to a real personal use case.
+**Stage 1 — CV generation:** takes a job description, researches the company, scores fit, and produces a tailored CV and cover letter PDF through a multi-agent pipeline with writer/critic review.
+
+**Stage 2 — Application tracking + interview prep (in progress):** stores all runs in a local SQLite database, exposes a REST API, and uses an MCP server to give Claude Desktop direct access to application context — JD, gap analysis, previous round prep — for mock interview sessions.
+
+Built to explore production-grade agent patterns: multi-agent coordination, adversarial review, guardrails, evaluation, MCP tool use, and persistent state management.
 
 ---
 
@@ -73,8 +77,10 @@ Requires TexLive: `brew install --cask mactex-no-gui`
 
 - Three modes: `--logs` (analyze past runs), `--dataset` (full pipeline), `--step` (single step)
 - `--model` flag to compare Haiku / Sonnet / Opus on any step
+- `--compare <prompts_file>` flag for A/B prompt testing — runs both versions on each JD, scores each with LLM-as-judge, prints side-by-side results
 - Automated checks: word count, keyword match, guardrail pass, research completeness, critic effectiveness
 - LLM-as-judge scoring (Haiku): CV relevance, CL specificity, gap accuracy, research quality, role analysis quality
+- Synthetic JD fixtures in `eval/jobs/` for repeatable eval without personal data
 
 ### Data model
 
@@ -200,6 +206,8 @@ examples/            Example CV templates for setup
 
 - Python 3.10+
 - `anthropic`, `fpdf2`, `jinja2`, `requests`, `beautifulsoup4`, `python-dotenv`, `markdown`
+- `fastapi`, `uvicorn` — for the local REST API
+- `mcp`, `gspread`, `google-auth` — for MCP servers (Sheets + Claude Desktop)
 - Anthropic API key
 - TexLive for LaTeX PDF generation: `brew install --cask mactex-no-gui`
 - Brave Search API key (optional)

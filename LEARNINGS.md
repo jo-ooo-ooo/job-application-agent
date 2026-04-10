@@ -88,6 +88,25 @@ I also evaluated LinkedIn and Glassdoor MCP servers but decided against them —
 
 ---
 
+## LLM-as-judge evals for writing quality: what they can and can't tell you
+
+After building the eval framework, I ran a prompt A/B test: reframing the gap analysis prompt from "hiring manager screening" to "candidate-first coaching." The hypothesis was that a coaching tone would produce more actionable, honest output.
+
+The setup: run both prompts on 7 JDs, score each with an LLM judge (Haiku), compare scores and inspect outputs.
+
+**What it showed:** the current prompt scored slightly higher on average (3.6 vs 3.3 out of 5). But the result was mostly ties — 4/7 tied, 2/7 current wins, 1/7 old prompt wins. Not a clear signal either way.
+
+**The honest limitations:**
+- Small sample (7 JDs) means any 1-2 swing could flip the conclusion
+- LLM-as-judge has no ground truth — it scores "does this look like good gap analysis?" not "did this actually help the candidate get an interview?"
+- The score parse success rate was 0/5 in the eval harness — a known limitation where the model can't call `read_file` to load the candidate profile in the eval context. This affected both prompts equally, so the A/B comparison was still valid, but it means the scores themselves are less reliable than they appear.
+
+The real signal from evals like this isn't which prompt scored higher — it's whether the output *reads* differently in ways you can verify. The current prompt produced more specific, JD-grounded analysis. That's a qualitative judgment, not a score.
+
+The lesson: LLM-as-judge evals are useful for catching regressions and spotting obvious quality differences. They're not reliable for small, directional improvements where the margin is within the judge's noise floor. For writing quality specifically, human review of a few outputs is more informative than a numeric score.
+
+---
+
 ## Evaluation
 
 Setting up the eval framework forced me to define what "good" means concretely:
@@ -165,31 +184,38 @@ The CLI is complete and works well. But managing 20+ applications at different s
 
 V2 adds a data layer and begins building toward an interview prep agent.
 
-### SQLite data model alongside checkpoints
+### SQLite + checkpoint dual-write: additive, not replacing
 
-Every pipeline run now dual-writes to `data/applications.db` (gitignored) alongside the existing JSON checkpoint files. Checkpoint files are unchanged — CLI resume still works. The DB write is best-effort (try/except) so a DB failure never crashes the pipeline.
+The key constraint: the CLI must keep working as-is. `--resume` depends on checkpoint files. Anything that breaks checkpoint compatibility would invalidate 20+ existing runs.
 
-Two tables: `applications` (pipeline outputs, status, score) and `rounds` (interview prep, transcripts, notes per round).
+The solution was to make the DB write purely additive. `save_checkpoint()` writes the JSON file exactly as before, then calls `upsert_application()` in a `try/except`. A DB failure prints a warning to stderr and returns — it never raises. The pipeline doesn't know or care whether the DB write succeeded.
 
-The key design decision: keep checkpoint files as the source of truth for the CLI, use the DB as the source of truth for everything that needs to query across runs. They're complementary, not competing.
+This meant existing checkpoints could be migrated incrementally via `migrate.py` rather than all-or-nothing. It also meant the rollout was zero-risk: if the DB turns out to be wrong, delete it and the checkpoint files still have everything.
 
-### FastAPI layer for the upcoming web UI
+Two separate source-of-truth principles: checkpoint files own CLI resume state. The DB owns queryable application state. They overlap in content but serve different consumers.
 
-A local REST API exposes the DB for the future web UI and interview prep tooling. All routes are local-only — no auth, open CORS. The API is thin: it just wraps `db.py` CRUD operations.
+### No ORM: stdlib sqlite3 was the right call
 
-### Interview prep via Claude Desktop MCP
+`db.py` uses stdlib `sqlite3` directly — no SQLAlchemy, no Peewee. The schema is two tables. The queries are simple SELECTs and one ON CONFLICT UPDATE.
 
-The most interesting architectural choice in v2: instead of building a separate practice UI, the interview prep loop runs entirely inside Claude Desktop using MCP.
+Adding an ORM would mean another dependency, a migration framework, and model class definitions for a schema that's unlikely to change. For a local-only tool with a fixed schema, the overhead isn't worth it. Raw SQL is also easier to audit for correctness — you can read exactly what's being executed.
 
-An MCP server (`mcp_db_server.py`) exposes six tools: list applications, find by company name, get full application context, get previous rounds, save prep notes, update notes after a session. Claude Desktop calls these automatically when the user says something like "I'm preparing for my Contentful interview."
+The one place raw SQL needs care is field whitelisting in `update_application` and `update_round`. Both use f-string column name interpolation, which is safe only because the column names come exclusively from a hardcoded allowlist (`_VALID_APP_FIELDS`, `_VALID_ROUND_FIELDS`), not from user input. That's documented in the code.
 
-Why this works:
-- Claude already knows how to run mock interviews
-- The context loading (JD, gap analysis, previous rounds) happens via tool calls, not copy-paste
-- Session notes are stored back into the DB at the end — feeding cross-round continuity
-- No custom UI needed for the conversational practice loop
+### Interview prep via Claude Desktop MCP: skipping the custom UI
 
-The conversation surface is Claude Desktop. The persistence layer is SQLite. MCP is the bridge.
+The interview prep loop is conversational — agent asks a question, user answers, agent coaches. Building that as a web UI means a chat interface, a backend for session state, streaming responses, and a lot of frontend work that isn't core to the AI engineering problem.
+
+The insight: Claude Desktop already is a chat interface. If you give it access to your data via MCP, you get the full practice loop for free — Claude asks questions, coaches on structure, and remembers context across the session. The only thing that needs to be built is the data access layer.
+
+`mcp_db_server.py` exposes six tools: list applications, find by company name, get full application context (JD, company research, gap analysis), get previous rounds, save prep notes, update notes. Claude Desktop calls these automatically when the user mentions a company.
+
+The architecture:
+- **Conversation surface:** Claude Desktop (already exists)
+- **Persistence:** SQLite via `db.py` (already exists)
+- **Bridge:** `mcp_db_server.py` (new, ~120 lines)
+
+Cross-round continuity — HR transcript feeding HM prep — works because session notes are stored in the `rounds` table. The next round's prep call reads what was flagged in the previous one. No custom state management needed.
 
 ## What's next
 
