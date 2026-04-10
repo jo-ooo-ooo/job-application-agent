@@ -150,3 +150,9 @@ def test_update_prep_notes_nothing_to_update():
     round_id = rounds[0]["id"]
     result = update_prep_notes(round_id)
     assert "Nothing to update" in result
+
+
+def test_update_prep_notes_round_not_found():
+    from mcp_db_server import update_prep_notes
+    result = update_prep_notes("round_nonexistent", notes="some note")
+    assert "not found" in result.lower()

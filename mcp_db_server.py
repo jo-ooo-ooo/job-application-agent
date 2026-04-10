@@ -15,7 +15,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mcp.server.fastmcp import FastMCP
+import db as db_module
 from db import (
+    get_db,
     list_applications,
     get_application,
     get_rounds,
@@ -148,6 +150,12 @@ def update_prep_notes(round_id: str, notes: str = "", transcript_analysis: str =
         fields["transcript_analysis"] = transcript_analysis
     if not fields:
         return "Nothing to update — provide notes or transcript_analysis."
+    # Check round exists before updating
+    conn = db_module.get_db()
+    row = conn.execute("SELECT id FROM rounds WHERE id = ?", (round_id,)).fetchone()
+    conn.close()
+    if not row:
+        return f"Round '{round_id}' not found."
     update_round(round_id, **fields)
     return f"Updated round {round_id}."
 
