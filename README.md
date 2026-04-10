@@ -1,12 +1,10 @@
 # Job Application Agent
 
-An end-to-end job application system built as an AI engineering portfolio project. It covers two stages:
+An AI agent that takes a job description and produces a tailored CV and cover letter. It researches the company, analyzes the role, scores fit, asks clarifying questions, and runs a writer/critic review loop before generating output.
 
-**Stage 1 — CV generation:** takes a job description, researches the company, scores fit, and produces a tailored CV and cover letter PDF through a multi-agent pipeline with writer/critic review.
+Built as a PM exploring agent architecture hands-on — every production pattern (guardrails, checkpointing, evaluation, multi-agent coordination) was added to solve a real problem that came up during use.
 
-**Stage 2 — Application tracking + interview prep (in progress):** stores all runs in a local SQLite database, exposes a REST API, and uses an MCP server to give Claude Desktop direct access to application context — JD, gap analysis, previous round prep — for mock interview sessions.
-
-Built to explore production-grade agent patterns: multi-agent coordination, adversarial review, guardrails, evaluation, MCP tool use, and persistent state management.
+V2 extends the agent into a full application tracker: a SQLite database stores all runs, a REST API exposes them, and a DB MCP server gives Claude Desktop direct access to application context for mock interview sessions.
 
 ---
 

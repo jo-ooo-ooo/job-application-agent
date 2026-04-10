@@ -4,6 +4,8 @@ Building a job application agent from scratch as a PM learning agent architectur
 
 The agent runs a multi-step pipeline: parallel research, gap analysis, project selection, CV/cover letter writing, critic review loop, and PDF generation. It does real web searches, reads my CV files, scores fit, and iteratively improves output before producing the final documents.
 
+V2 extends it into an application tracker: all runs are stored in a local SQLite database, a REST API exposes the data, and a DB MCP server gives Claude Desktop direct access to application context — JD, company research, gap analysis, previous interview rounds — for mock interview prep sessions.
+
 I built it iteratively. First just making it work, then adding production patterns one at a time.
 
 ---
@@ -180,42 +182,23 @@ The general lesson: never ask a model to rewrite a large file. Rewrite outputs a
 
 ## v2: from CLI tool to application tracker
 
-The CLI is complete and works well. But managing 20+ applications at different stages — some waiting for reply, some in screening, some in interview — made the limitation clear: the CLI is stateless. There's no way to see all applications at once or navigate between them.
+The CLI works well for a single application. But once you have 20+ runs at different stages — some waiting for reply, some in screening, some in interview — the limitation becomes clear: there's no way to see all applications at once or navigate between them.
 
-V2 adds a data layer and begins building toward an interview prep agent.
+V2 adds a data layer and the foundation for an interview prep agent.
 
-### SQLite + checkpoint dual-write: additive, not replacing
+### Keeping the CLI while adding a database
 
-The key constraint: the CLI must keep working as-is. `--resume` depends on checkpoint files. Anything that breaks checkpoint compatibility would invalidate 20+ existing runs.
+The constraint was explicit: keep the CLI working and don't lose the existing 20 checkpoints. The solution was to write to both — checkpoint files unchanged for CLI resume, plus a SQLite database for everything that needs to query across runs. `migrate.py` imports existing checkpoints on first setup.
 
-The solution was to make the DB write purely additive. `save_checkpoint()` writes the JSON file exactly as before, then calls `upsert_application()` in a `try/except`. A DB failure prints a warning to stderr and returns — it never raises. The pipeline doesn't know or care whether the DB write succeeded.
+The data model has two tables: `applications` (pipeline outputs, status, score) and `rounds` (interview prep, transcripts, notes per round). Status transitions: draft → cv_ready → applied → screening → interview → offer/rejected. The `--log-outcome` CLI flag updates status from the terminal without running the pipeline.
 
-This meant existing checkpoints could be migrated incrementally via `migrate.py` rather than all-or-nothing. It also meant the rollout was zero-risk: if the DB turns out to be wrong, delete it and the checkpoint files still have everything.
+### Claude Desktop as the interview prep interface
 
-Two separate source-of-truth principles: checkpoint files own CLI resume state. The DB owns queryable application state. They overlap in content but serve different consumers.
+For the interview prep loop, I decided against building a dedicated web UI. The practice loop is conversational — the agent asks a question, I answer, it coaches. Claude Desktop already does this natively.
 
-### No ORM: stdlib sqlite3 was the right call
+The decision: expose the SQLite database as an MCP server (`mcp_db_server.py`) and use Claude Desktop as the practice surface. When I say "I'm preparing for my Contentful interview," Claude calls the tools automatically, loads the full context — JD, gap analysis, previous rounds — and starts the session. Notes are stored back to the DB at the end, so the next round's prep builds on what happened in the previous one.
 
-`db.py` uses stdlib `sqlite3` directly — no SQLAlchemy, no Peewee. The schema is two tables. The queries are simple SELECTs and one ON CONFLICT UPDATE.
-
-Adding an ORM would mean another dependency, a migration framework, and model class definitions for a schema that's unlikely to change. For a local-only tool with a fixed schema, the overhead isn't worth it. Raw SQL is also easier to audit for correctness — you can read exactly what's being executed.
-
-The one place raw SQL needs care is field whitelisting in `update_application` and `update_round`. Both use f-string column name interpolation, which is safe only because the column names come exclusively from a hardcoded allowlist (`_VALID_APP_FIELDS`, `_VALID_ROUND_FIELDS`), not from user input. That's documented in the code.
-
-### Interview prep via Claude Desktop MCP: skipping the custom UI
-
-The interview prep loop is conversational — agent asks a question, user answers, agent coaches. Building that as a web UI means a chat interface, a backend for session state, streaming responses, and a lot of frontend work that isn't core to the AI engineering problem.
-
-The insight: Claude Desktop already is a chat interface. If you give it access to your data via MCP, you get the full practice loop for free — Claude asks questions, coaches on structure, and remembers context across the session. The only thing that needs to be built is the data access layer.
-
-`mcp_db_server.py` exposes six tools: list applications, find by company name, get full application context (JD, company research, gap analysis), get previous rounds, save prep notes, update notes. Claude Desktop calls these automatically when the user mentions a company.
-
-The architecture:
-- **Conversation surface:** Claude Desktop (already exists)
-- **Persistence:** SQLite via `db.py` (already exists)
-- **Bridge:** `mcp_db_server.py` (new, ~120 lines)
-
-Cross-round continuity — HR transcript feeding HM prep — works because session notes are stored in the `rounds` table. The next round's prep call reads what was flagged in the previous one. No custom state management needed.
+This is still in progress — the DB server is built and tested, Claude Desktop registration is the remaining step.
 
 ## What's next
 
