@@ -142,6 +142,12 @@ class TestExperience:
         exp = Experience.from_dict(data)
         assert exp.company_description == "A cool company"
 
+    def test_missing_bullets_returns_empty_list(self):
+        # Model sometimes omits "bullets" key — should not raise KeyError
+        data = {"title": "PM", "company": "Acme", "location": "Berlin", "dates": "2022 -- 2025"}
+        exp = Experience.from_dict(data)
+        assert exp.bullets == []
+
 
 class TestSideProject:
     def test_from_dict(self):
@@ -158,3 +164,9 @@ class TestSideProject:
         data = {"name": "Project", "bullets": ["Did stuff"]}
         sp = SideProject.from_dict(data)
         assert sp.github_url == ""
+
+    def test_missing_bullets_returns_empty_list(self):
+        # Model sometimes omits "bullets" key — should not raise KeyError
+        data = {"name": "Project", "github_url": "https://github.com/user/repo"}
+        sp = SideProject.from_dict(data)
+        assert sp.bullets == []

@@ -4,7 +4,7 @@ An AI agent that takes a job description and produces a tailored CV and cover le
 
 Built as a PM exploring agent architecture hands-on — every production pattern (guardrails, checkpointing, evaluation, multi-agent coordination) was added to solve a real problem that came up during use.
 
-V2 (in progress) extends the agent into a full application tracker: a SQLite database stores all runs, a REST API exposes them, and a DB MCP server gives Claude Desktop direct access to application context — JD, gap analysis, previous rounds — for mock interview prep sessions.
+V2 extends the agent into a full application tracker: a SQLite database stores all runs, a REST API exposes them, and a DB MCP server gives Claude Desktop direct access to application context — JD, gap analysis, previous rounds — for mock interview prep sessions.
 
 ---
 
@@ -20,17 +20,22 @@ Step 4: CV construction — tailored, structured JSON (CVData)
 Step 5: Cover letter — specific to company, addresses gaps honestly
          |
      Critic review loop  [writer/critic agents, up to 3 rounds]
-     Guardrail auto-fix  [structural validation + model fix]
+     Guardrail auto-fix  [structural validation + scaffold check + model fix]
          |
 Step 6: PDF generation  [LaTeX via pdflatex, fpdf2 fallback]
 Step 7: Google Sheets log  [MCP → append row with score, recommendation, run_id]
+Step 8: DB write  [SQLite — upserted after every step for resume + cross-run queries]
          |
 Output: Candidate_Name_CV_Company_Role.pdf + Candidate_Name_Cover_Letter_Company_Role.pdf
+
+Later — interview prep (Claude Desktop):
+  Claude Desktop → DB MCP server → loads JD, gap analysis, previous rounds
+  Mock interview session → save_prep_notes → stored in rounds table
 ```
 
 Two human gates: after gap analysis (proceed?), and after seeing the CV/cover letter (approve, revise, or quit).
 
-All runs are stored in a local SQLite database (`data/applications.db`) alongside checkpoint files. A FastAPI layer exposes the data for the upcoming web UI and interview prep agent.
+All runs are stored in a local SQLite database (`data/applications.db`) alongside checkpoint files. A FastAPI layer exposes the data, and a Claude Desktop MCP server enables interview prep sessions with full application context loaded automatically.
 
 ---
 
@@ -70,6 +75,7 @@ Requires TexLive: `brew install --cask mactex-no-gui`
 - Gap analysis validation (scoring dimensions present)
 - Auto-fix: if guardrails fail after critic loop, model is asked to fix specific issues
 - **CV scaffold system**: fixed facts (company names, titles, dates, locations, project URLs, skill inventory) are parsed from the master list and injected into the CV construction prompt as structured JSON. The model must copy these fields exactly. A deterministic post-generation check validates every field — any mismatch triggers an auto-fix with the scaffold facts re-injected.
+- **CV template**: GitHub link rendered in the header; location field automatically appended with "Open to Relocation" for roles outside Berlin or not fully remote.
 
 ### Evaluation
 
@@ -106,7 +112,7 @@ Two MCP servers via stdio transport:
 
 **Job Applications DB** (`mcp_db_server.py`) — exposes the SQLite database to Claude Desktop. Six tools: `list_jobs`, `find_application`, `get_application_detail`, `get_interview_rounds`, `save_prep_notes`, `update_prep_notes`. Enables Claude Desktop to run mock interview sessions with full application context — JD, gap analysis, previous round prep — loaded automatically.
 
-Register in `~/Library/Application Support/Claude/claude_desktop_config.json` to use with Claude Desktop.
+Registered in `~/Library/Application Support/Claude/claude_desktop_config.json`. Start a new chat per company — Claude loads full context automatically from the DB at the start of each session.
 
 ---
 

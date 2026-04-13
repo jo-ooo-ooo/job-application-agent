@@ -28,6 +28,14 @@ Stateless steps mean each step is independently testable, reproducible, and repl
 
 ---
 
+## Structured output is the right abstraction for document generation
+
+The first version of CV construction asked the model to output markdown. That worked for display, but PDF generation was a problem: `fpdf2` rendered plain text with no formatting, the output looked amateur, and getting the model to produce well-structured markdown consistently was fragile.
+
+The fix was to change the output contract entirely. The model now outputs JSON matching a `CVData` dataclass. That JSON gets rendered into a LaTeX template via Jinja2, then compiled with `pdflatex` to produce a properly typeset PDF. Separation of concerns: the model handles content selection and framing, the template handles layout.
+
+---
+
 ## Multi-agent patterns: what worked and what didn't
 
 ### Parallel research agents
@@ -37,8 +45,6 @@ Company research and role analysis are independent — they both need only the j
 ### Writer/critic review loop
 
 The critic reviews the CV and cover letter from a hiring manager's perspective, and the writer revises based on feedback. This loop runs up to 3 iterations.
-
-**What I learned:**
 
 The critic loop is only as good as its observability. In early versions, the loop was a black box — it printed "Completed in 3 rounds" but I couldn't tell whether the critic approved or just hit max iterations. The fix: structured `CriticResult` that tracks per-round feedback, parsed issues, and word count deltas. Now I can see exactly what the critic found and whether revisions addressed it.
 
@@ -72,6 +78,28 @@ The fix: guardrails as a safety net *after* the critic loop. If structural issue
 
 ---
 
+## Hallucination has multiple failure modes — vague instructions don't fix them
+
+During testing, the model hallucinated in two distinct places that required different fixes:
+
+**Skills hallucination** — The model invented plausible-sounding skills not in the master list: `contribution margin analysis`, `predictive modelling`, `content ranking & recommendation algorithms`. These sound reasonable for a PM profile, which is exactly why they're dangerous. The fix was to add an explicit rule referencing the Skills section of the master list — but that still wasn't enough on its own.
+
+**Experience hallucination** — More dangerous. During the critic revision loop, when asked to revise the CV JSON, the model invented an entire fake company — a plausible-sounding one that fit the candidate's background, but one they never worked at. It replaced a real company that was absent from the model's context at the time.
+
+The first version of hallucination prevention added rules like "never invent companies" and "only use skills from the master list." These didn't work. The model follows the instruction directionally but still fills gaps with plausible content when the real information is absent from its context.
+
+Two things actually work:
+
+**1. Inject the allowed set explicitly as structured data.** The CV scaffold parses the master list into a `CVScaffold` object — company names, titles, dates, locations, project URLs, skill tokens — and serialises it as JSON directly into the prompt. The model is told: "copy these fields exactly." This is fundamentally different from "don't invent": instead of an open-ended prohibition, the model has a closed list to copy from.
+
+**2. Validate deterministically after generation.** After the model produces CV JSON, a post-generation check compares every company, title, date, project name, GitHub URL, and skill token against the scaffold. Any mismatch triggers an auto-fix, with the scaffold re-injected so the model has the correct values in front of it.
+
+The key insight: LLMs are bad at "don't do X" and good at "here is the exact value, copy it." Structured injection + deterministic validation is more reliable than prompt engineering alone.
+
+A harder version of the same problem: validation that appears to work but silently isn't. The scaffold check was running after every pipeline step — but when the model wrapped its output in code fences, the JSON parsing failed quietly, the validation was skipped entirely, and the pipeline continued with no warning. The PDFs were generated with hallucinated content and 5 side projects instead of 3, and the guardrails said nothing. The fix: normalise model output at the point it's written to state, so every downstream reader gets clean data without needing to defend itself individually.
+
+---
+
 ## Tool control matters
 
 The model has access to `web_search`, `read_file`, and `generate_pdf` tools. But during CV and cover letter construction, the model would proactively call `generate_pdf` — sometimes 5 times in a row, trying to fit the output on one page. Each call added commentary ("PDF saved to...") that polluted the actual CV markdown.
@@ -82,34 +110,15 @@ This cut CV construction from 7 API calls ($0.29, 86s) to 2 API calls ($0.05, 27
 
 ---
 
-## MCP integration: lessons from Google Sheets
+## Checkpointing matters more for expensive pipelines
 
-MCP (Model Context Protocol) connects the agent to Google Sheets for application tracking. The server runs as a subprocess with stdio transport; the client discovers tools at runtime.
+A full run costs $0.50-1.50 and takes 5-15 minutes. If it crashes at step 5 (CV construction), I've lost most of my spend. So I added checkpointing to handle rate limit exhaustion, network drops, overloaded errors, or the user closing the terminal.
 
-I also evaluated LinkedIn and Glassdoor MCP servers but decided against them — ToS violations, account ban risk, and GDPR concerns made them too risky for a personal tool.
-
----
-
-## LLM-as-judge evals for writing quality: what they can and can't tell you
-
-After building the eval framework, I ran a prompt A/B test: reframing the gap analysis prompt from "hiring manager screening" to "candidate-first coaching." The hypothesis was that a coaching tone would produce more actionable, honest output.
-
-The setup: run both prompts on 7 JDs, score each with an LLM judge (Haiku), compare scores and inspect outputs.
-
-**What it showed:** the current prompt scored slightly higher on average (3.6 vs 3.3 out of 5). But the result was mostly ties — 4/7 tied, 2/7 current wins, 1/7 old prompt wins. Not a clear signal either way.
-
-**The honest limitations:**
-- Small sample (7 JDs) means any 1-2 swing could flip the conclusion
-- LLM-as-judge has no ground truth — it scores "does this look like good gap analysis?" not "did this actually help the candidate get an interview?"
-- The score parse success rate was 0/5 in the eval harness — a known limitation where the model can't call `read_file` to load the candidate profile in the eval context. This affected both prompts equally, so the A/B comparison was still valid, but it means the scores themselves are less reliable than they appear.
-
-The real signal from evals like this isn't which prompt scored higher — it's whether the output *reads* differently in ways you can verify. The current prompt produced more specific, JD-grounded analysis. That's a qualitative judgment, not a score.
-
-The lesson: LLM-as-judge evals are useful for catching regressions and spotting obvious quality differences. They're not reliable for small, directional improvements where the margin is within the judge's noise floor. For writing quality specifically, human review of a few outputs is more informative than a numeric score.
+The implementation is simple — save the state dict to JSON after every step, load it back on `--resume`. Backward compatibility matters: when the schema changes (like removing `manager_name` and adding `role_analysis`), the checkpoint loader handles missing/extra fields gracefully.
 
 ---
 
-## Evaluation
+## Evaluation: defining what "good" means
 
 Setting up the eval framework forced me to define what "good" means concretely:
 - CV word count in range (100-800)
@@ -122,61 +131,33 @@ Setting up the eval framework forced me to define what "good" means concretely:
 
 I also ran a round of eval to see whether I could swap company research from Sonnet to Haiku to save cost. Haiku costs 5x less and runs 2x faster. But Haiku only gives you facts, while Sonnet adds interpretation — layoff context, valuation concerns, what the role means strategically. That extra context is exactly what feeds into gap analysis and CV tailoring downstream.
 
----
+I also ran a prompt A/B test: reframing the gap analysis prompt from "hiring manager screening" to "candidate-first coaching." The setup: run both prompts on 7 JDs, score each with an LLM judge (Haiku), compare scores and inspect outputs. The current prompt scored slightly higher on average (3.6 vs 3.3), but the result was mostly ties — not a clear signal either way.
 
-## Checkpointing matters more for expensive pipelines
+The honest limitations of LLM-as-judge: it scores "does this look like good gap analysis?" not "did this actually help the candidate get an interview?" Small samples mean any 1-2 swing flips the conclusion. The real signal isn't which prompt scored higher — it's whether the output *reads* differently in ways you can verify. The current prompt produced more specific, JD-grounded analysis. That's a qualitative judgment, not a score.
 
-A full run costs $0.50-1.50 and takes 5-15 minutes. If it crashes at step 5 (CV construction), I've lost most of my spend. So I added checkpointing to handle rate limit exhaustion, network drops, overloaded errors, or the user closing the terminal.
-
-The implementation is simple — save the state dict to JSON after every step, load it back on `--resume`. Backward compatibility matters: when the schema changes (like removing `manager_name` and adding `role_analysis`), the checkpoint loader handles missing/extra fields gracefully.
+LLM-as-judge evals are useful for catching regressions and spotting obvious quality differences. They're not reliable for small, directional improvements where the margin is within the judge's noise floor. For writing quality specifically, human review of a few outputs is more informative than a numeric score.
 
 ---
 
-## What I'd do differently
-
-**Start with eval.** I built the core agent first, then added evaluation later. That meant I was flying blind for the first 20+ runs.
-
-**Save every output, not just scores.** The first version of eval only saved metrics — word counts, scores. Not the actual text. That made model comparisons impossible after the fact. Every run should save the full output for every step.
-
----
-
-## Structured output is the right abstraction for document generation
-
-The first version of CV construction asked the model to output markdown. That worked for display, but PDF generation was a problem: `fpdf2` rendered plain text with no formatting, the output looked amateur, and getting the model to produce well-structured markdown consistently was fragile.
-
-The fix was to change the output contract entirely. The model now outputs JSON matching a `CVData` dataclass. That JSON gets rendered into a LaTeX template via Jinja2, then compiled with `pdflatex` to produce a properly typeset PDF. Separation of concerns: the model handles content selection and framing, the template handles layout.
-
----
-
-## Hallucination has multiple failure modes — vague instructions don't fix them
-
-During testing, the model hallucinated in two distinct places that required different fixes:
-
-**Skills hallucination** — The model invented plausible-sounding skills not in the master list: `contribution margin analysis`, `predictive modelling`, `content ranking & recommendation algorithms`. These sound reasonable for a PM profile, which is exactly why they're dangerous. The fix was to add an explicit rule referencing the Skills section of the master list — but that still wasn't enough on its own.
-
-**Experience hallucination** — More dangerous. During the critic revision loop, when asked to revise the CV JSON, the model invented an entire fake company — a plausible-sounding one that fit the candidate's background, but one they never worked at. It replaced a real company that was absent from the model's context at the time.
-
-The same pattern applies to skills, dates, and any other structured field where the space of valid values is bounded.
-
-The first version of hallucination prevention added rules like "never invent companies" and "only use skills from the master list." These didn't work. The model follows the instruction directionally but still fills gaps with plausible content when the real information is absent from its context.
-
-Two things actually work:
-
-**1. Inject the allowed set explicitly as structured data.** The CV scaffold parses the master list into a `CVScaffold` object — company names, titles, dates, locations, project URLs, skill tokens — and serialises it as JSON directly into the prompt. The model is told: "copy these fields exactly." This is fundamentally different from "don't invent": instead of an open-ended prohibition, the model has a closed list to copy from.
-
-**2. Validate deterministically after generation.** After the model produces CV JSON, a post-generation check compares every company, title, date, project name, GitHub URL, and skill token against the scaffold. Any mismatch triggers an auto-fix, with the scaffold re-injected so the model has the correct values in front of it.
-
-The key insight: LLMs are bad at "don't do X" and good at "here is the exact value, copy it." Structured injection + deterministic validation is more reliable than prompt engineering alone.
-
----
-
-## Append-only master list updates prevent silent truncation
+## Append-only updates prevent silent truncation
 
 The gap update step originally asked the model to output the entire master list with new content added inline. For a 25k-character file, the model sometimes truncated the output — silently dropping the tail of the file. There was no error, no warning; content just disappeared.
 
-The fix: the model only outputs the *new lines to add*. The code reads the existing file, appends the new block to a `## Candidate Clarifications` section, and writes back. The original content is never touched. This also makes the additions easy to inspect — they're in one dedicated section rather than scattered through the file.
+The fix: the model only outputs the *new lines to add*. The code reads the existing file, appends the new block to a `## Candidate Clarifications` section, and writes back. The original content is never touched.
 
-The general lesson: never ask a model to rewrite a large file. Rewrite outputs are both expensive and fragile. Append-only is safer, cheaper, and easier to audit.
+Never ask a model to rewrite a large file. Rewrite outputs are both expensive and fragile. Append-only is safer, cheaper, and easier to audit.
+
+---
+
+## MCP integration
+
+MCP (Model Context Protocol) connects external tools to the agent via stdio transport. I used it in two places:
+
+**Google Sheets** — logs each application run automatically after PDF generation. The server runs as a subprocess; the client discovers tools at runtime. I also evaluated LinkedIn and Glassdoor MCP servers but decided against them — ToS violations, account ban risk, and GDPR concerns made them too risky for a personal tool.
+
+**Claude Desktop interview prep** — the SQLite database is exposed as an MCP server, giving Claude Desktop direct access to application context. When I mention a company I'm interviewing at, Claude loads the JD, gap analysis, and previous prep rounds automatically and starts the session. Notes are stored back to the DB at the end, so each round builds on the last.
+
+The decision to use Claude Desktop as the interview prep surface rather than building a dedicated UI: the prep loop is conversational — the agent asks a question, I answer, it coaches. Claude Desktop already does this natively.
 
 ---
 
@@ -184,28 +165,26 @@ The general lesson: never ask a model to rewrite a large file. Rewrite outputs a
 
 The CLI works well for a single application. But once you have 20+ runs at different stages — some waiting for reply, some in screening, some in interview — the limitation becomes clear: there's no way to see all applications at once or navigate between them.
 
-V2 adds a data layer and the foundation for an interview prep agent.
-
 ### Keeping the CLI while adding a database
 
 The constraint was explicit: keep the CLI working and don't lose the existing 20 checkpoints. The solution was to write to both — checkpoint files unchanged for CLI resume, plus a SQLite database for everything that needs to query across runs. `migrate.py` imports existing checkpoints on first setup.
 
 The data model has two tables: `applications` (pipeline outputs, status, score) and `rounds` (interview prep, transcripts, notes per round). Status transitions: draft → cv_ready → applied → screening → interview → offer/rejected. The `--log-outcome` CLI flag updates status from the terminal without running the pipeline.
 
-### Claude Desktop as the interview prep interface
-
-For the interview prep loop, I decided against building a dedicated web UI. The practice loop is conversational — the agent asks a question, I answer, it coaches. Claude Desktop already does this natively.
-
-The decision: expose the SQLite database as an MCP server (`mcp_db_server.py`) and use Claude Desktop as the practice surface. When I mention a company I'm interviewing at, Claude calls the tools automatically, loads the full context — JD, gap analysis, previous rounds — and starts the session. Notes are stored back to the DB at the end, so the next round's prep builds on what happened in the previous one.
-
-**This is a work in progress.** The DB MCP server is built and tested. Claude Desktop registration is the remaining step before the full loop works end-to-end.
+---
 
 ## What's next
 
-V2 data model + API layer is complete. Interview prep via Claude Desktop MCP is partially built (DB server done, Claude Desktop registration pending).
-
-Next directions:
-- **Claude Desktop registration** — register `mcp_db_server.py` in Claude Desktop config to enable the full prep loop
 - **Interview prep agent** — structured prompting for HR screening, HM interview, case study prep. Each round type has different coaching logic.
 - **Cross-round continuity** — HR transcript → HM prep. The `rounds` table already supports this; the prep agent needs to read previous rounds before generating the next.
 - **Web UI** — minimal dashboard: application list, status, trigger prep, review outputs. Built on top of the existing FastAPI layer.
+
+---
+
+## What I'd do differently
+
+**Start with eval.** I built the core agent first, then added evaluation later. That meant I was flying blind for the first 20+ runs. Defining "good" upfront forces you to think about what the system is actually supposed to do — and surfaces edge cases before they become production incidents.
+
+**Save every output, not just scores.** The first version of eval only saved metrics — word counts, scores. Not the actual text. That made model comparisons impossible after the fact. Every run should save the full output for every step.
+
+**Test the integration seams, not just the units.** Most of the serious bugs in this project — the guardrail bypass, the hallucinated company that slipped through — weren't in any individual function. They were in how the pieces connected. Unit tests caught individual functions working correctly; the failures happened at the boundaries between them. A few integration tests that exercise the full path from model output to validation result would have caught these earlier.

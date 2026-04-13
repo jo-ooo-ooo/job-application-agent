@@ -221,8 +221,9 @@ The scaffold defines:
 - experience_skeletons: EVERY role listed here MUST appear in the output — no exceptions,
   no omissions. Copy title, company, location, and dates exactly as given.
   You write the bullets and company_description.
-- side_project_refs: the full catalogue. Pick 2-4. Copy name and github_url exactly.
-  You write the bullets.
+- side_project_refs: the full catalogue. Pick the 2-3 most relevant. Copy name and github_url exactly.
+  You write the bullets. Bullets must be grounded in what each project actually does — do not invent
+  responsibilities or outcomes not evident from the project description.
 - skills_inventory: every valid skill token. Select and group freely, but every token
   you include MUST appear verbatim in this list — no inventions, no paraphrases.
 
@@ -244,6 +245,8 @@ SKILLS SECTION RULES (strictly enforced):
 
 Rules:
 - Think like the hiring manager: what would make them say "this person gets it"?
+- Bullets must reflect real work the candidate did — reframe and reword from the master list,
+  but never invent responsibilities, projects, or outcomes that are not in the source material.
 - Reframe bullets in the language the hiring team uses; mirror JD keywords naturally
 - FOCUS on the two most recent roles — give them the most space and strongest bullets
 - Earlier roles: include with 1-2 bullets minimum — keep them brief but never omit them
@@ -253,6 +256,9 @@ Rules:
 - For LaTeX compatibility: use -- for en-dashes in date ranges (e.g., "Sep 2022 -- Oct 2025")
 - Do NOT escape special characters like &, %, $ — the system handles that automatically
 - Do NOT add career break, gap year, or relocation entries to the experience list
+- Top-level `location`: use "Berlin, Germany" if the role is based in Berlin or is fully remote.
+  If the role requires relocation (office-based outside Berlin), use "Berlin, Germany, Open to Relocation".
+- Top-level `github`: copy from the candidate's contact info in cvs/template_standard.md
 
 Output ONLY valid JSON in this exact structure (no commentary, no markdown):
 
@@ -358,8 +364,9 @@ Review as a hiring manager deciding whether to interview this candidate:
 2. Are key signals/keywords present for ATS?
 3. Is the most relevant experience given the most space?
 4. Are bullet points specific (Action + Result + Impact) or vague?
-5. Does the cover letter show genuine understanding of the company?
-6. Is anything misleading, generic, or buried that should be prominent?
+5. Are any two bullets making the same point? Duplicates waste space — flag and merge them.
+6. Does the cover letter show genuine understanding of the company?
+7. Is anything misleading, generic, or buried that should be prominent?
 
 Max 5 revision items. Focus only on what would change the hiring decision.
 Do NOT nitpick formatting or style. Focus on substance and positioning.

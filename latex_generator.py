@@ -63,6 +63,7 @@ def _escape_cv_data(cv: CVData) -> CVData:
         location=escape_latex(cv.location),
         title_tagline=escape_latex(cv.title_tagline),
         linkedin=cv.linkedin,  # URLs go inside \\href, no escaping
+        github=cv.github,  # URL, no escaping
         skills={escape_latex(k): [escape_latex(v) for v in vs] for k, vs in cv.skills.items()},
         experience=[
             Experience(
@@ -98,6 +99,7 @@ def render_cv_latex(cv: CVData) -> str:
         phone=escaped.phone,
         location=escaped.location,
         linkedin=escaped.linkedin,
+        github=escaped.github,
         title_tagline=escaped.title_tagline,
         skills=escaped.skills,
         experience=escaped.experience,

@@ -469,7 +469,7 @@ def main():
 
     # Update state from critic result
     if state.get("cv_json"):
-        state["cv_json"] = critic_result.cv_markdown
+        state["cv_json"] = _strip_code_fences(critic_result.cv_markdown)
     else:
         state["cv_markdown"] = _strip_code_fences(critic_result.cv_markdown)
     state["cover_letter_markdown"] = _strip_code_fences(critic_result.cover_letter_markdown)
@@ -479,12 +479,14 @@ def main():
     # Run structural guardrails as a safety net — auto-fix if issues detected
     if state.get("cv_json"):
         try:
-            cv_dict = _json.loads(state["cv_json"])
+            import dataclasses
+            cv_parsed = parse_cv_json(state["cv_json"])
+            cv_dict = dataclasses.asdict(cv_parsed)
             cv_warnings = validate_cv_structured(cv_dict, candidate_name)
             # Scaffold validation: deterministic check of frozen facts
             if scaffold is not None:
                 cv_warnings += validate_cv_against_scaffold(cv_dict, scaffold)
-        except _json.JSONDecodeError:
+        except Exception:
             cv_warnings = ["CV JSON is malformed after critic loop."]
     else:
         cv_warnings = validate_cv(state.get("cv_markdown", ""), candidate_name)
@@ -526,7 +528,7 @@ def main():
         )
         fix_result = run_step(client, SYSTEM_PROMPT, fix_prompt, metrics=metrics, step_name="revision", exclude_tools=["generate_pdf"])
         logger.finish_step()
-        revised_cv = _extract_section(fix_result, "CV", cv_for_fix)
+        revised_cv = _strip_code_fences(_extract_section(fix_result, "CV", cv_for_fix))
         if state.get("cv_json"):
             state["cv_json"] = revised_cv
         else:
@@ -580,7 +582,7 @@ def main():
             )
             logger.finish_step()
             print(revision)
-            revised_cv = _extract_section(revision, "CV", cv_for_revision)
+            revised_cv = _strip_code_fences(_extract_section(revision, "CV", cv_for_revision))
             state["cover_letter_markdown"] = _extract_section(revision, "Cover Letter", state["cover_letter_markdown"])
             if state.get("cv_json"):
                 state["cv_json"] = revised_cv
@@ -618,11 +620,17 @@ def main():
         try:
             # Get contact info from CV data
             if state.get("cv_json"):
-                cv_info = _json.loads(state["cv_json"])
-                cl_name = cv_info.get("name", candidate_name)
-                cl_email = cv_info.get("email", "")
-                cl_phone = cv_info.get("phone", "")
-                cl_location = cv_info.get("location", "")
+                try:
+                    cv_parsed = parse_cv_json(state["cv_json"])
+                    cl_name = cv_parsed.name
+                    cl_email = cv_parsed.email
+                    cl_phone = cv_parsed.phone
+                    cl_location = cv_parsed.location
+                except Exception:
+                    cl_name = candidate_name
+                    cl_email = ""
+                    cl_phone = ""
+                    cl_location = ""
             else:
                 cl_name = candidate_name
                 cl_email = ""
@@ -658,7 +666,7 @@ def _run_gap_analysis(client, state, logger):
 
     Returns (score, recommendation) tuple.
     """
-    print("\n[Step 2/6] Analyzing fit (hiring manager perspective)...")
+    print("\n[Step 2/6] Analyzing fit...")
     metrics = logger.start_step("gap_analysis")
     state["gap_analysis"] = run_step(
         client, SYSTEM_PROMPT,
@@ -943,7 +951,8 @@ def _build_pdf_filenames(candidate_name: str, state: dict) -> tuple[str, str]:
     # ── Company name ──────────────────────────────────────────────────────────
     # Best source: company_research — the model writes "**Company:** Name, ..."
     # Match both "- Company:" and "- **Company:**" (bold markdown) variants.
-    m = re.search(r'[-*]\s*\**Company:\**\s*\[?([A-Za-z0-9][A-Za-z0-9 .&\'-]{1,40}?)(?:\*{0,2}\s*[,\(\[|]|\*{0,2}\s*$)', research, re.MULTILINE)
+    # Stop at (, —, –, *, comma, newline — all signal start of a description, not the name
+    m = re.search(r'(?i)company:\s*\*{0,2}\s*([A-Za-z0-9][^(\[*\n,\u2014\u2013]{0,30}?)(?=\s*[\(\[*\n,\u2014\u2013]|$)', research)
     if m:
         company = m.group(1).strip()
 

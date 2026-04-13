@@ -104,6 +104,17 @@ class TestRenderCvLatex:
         assert "MIT" in tex
         assert "BA in CS" in tex
 
+    def test_github_url_rendered_in_header(self):
+        # github field was previously dropped by render_cv_latex — verify it appears
+        cv = CVData(
+            name="Jane", email="a@b.com", phone="+1", location="Berlin",
+            title_tagline="PM", skills={}, experience=[],
+            education={"degree": "BA", "university": "U"},
+            github="https://github.com/testuser",
+        )
+        tex = render_cv_latex(cv)
+        assert "github.com/testuser" in tex
+
     def test_no_side_projects_section_when_empty(self):
         cv = CVData(
             name="Jane", email="a@b.com", phone="+1", location="Berlin",

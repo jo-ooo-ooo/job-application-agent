@@ -222,7 +222,14 @@ class TestValidateCvAgainstScaffold:
     def test_too_few_side_projects(self):
         projs = [_make_cv()["side_projects"][0]]
         warnings = validate_cv_against_scaffold(_make_cv(side_projects=projs), SCAFFOLD)
-        assert any("2-4" in w for w in warnings)
+        assert any("2-3" in w for w in warnings)
+
+    def test_too_many_side_projects(self):
+        # Model outputting 4+ projects should be flagged — limit is 2-3
+        base = _make_cv()["side_projects"]
+        four_projects = base + base  # 4 entries (names will fail name check, but count check fires first)
+        warnings = validate_cv_against_scaffold(_make_cv(side_projects=four_projects), SCAFFOLD)
+        assert any("2-3" in w for w in warnings)
 
     def test_hallucinated_project_name(self):
         projs = _make_cv()["side_projects"]

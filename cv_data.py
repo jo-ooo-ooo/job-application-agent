@@ -21,7 +21,7 @@ class Experience:
             company=d["company"],
             location=d["location"],
             dates=d["dates"],
-            bullets=d["bullets"],
+            bullets=d.get("bullets", []),
             company_description=d.get("company_description", ""),
         )
 
@@ -36,7 +36,7 @@ class SideProject:
     def from_dict(cls, d: dict) -> "SideProject":
         return cls(
             name=d["name"],
-            bullets=d["bullets"],
+            bullets=d.get("bullets", []),
             github_url=d.get("github_url", ""),
         )
 

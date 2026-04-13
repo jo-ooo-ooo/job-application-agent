@@ -326,3 +326,50 @@ class TestReadFile:
     def test_reads_existing_file(self):
         result = _read_file("requirements.txt")
         assert "anthropic" in result
+
+
+# ── Company name extraction regex ─────────────────────────────
+
+import re
+
+def _extract_company_name(research: str) -> str:
+    """Mirror of the regex used in main._build_pdf_filenames."""
+    m = re.search(r'(?i)company:\s*\*{0,2}\s*([A-Za-z0-9][^(\[*\n,\u2014\u2013]{0,30}?)(?=\s*[\(\[*\n,\u2014\u2013]|$)', research)
+    return m.group(1).strip() if m else ""
+
+
+class TestCompanyNameExtraction:
+    def test_bold_uppercase_format(self):
+        research = "**COMPANY: Spotify**\n- Stage: Public"
+        assert _extract_company_name(research) == "Spotify"
+
+    def test_bold_mixed_case_format(self):
+        research = "- **Company:** Acme Corp, Berlin"
+        assert _extract_company_name(research) == "Acme Corp"
+
+    def test_plain_format(self):
+        research = "Company: TechCorp\nFounded: 2010"
+        assert _extract_company_name(research) == "TechCorp"
+
+    def test_stops_at_parenthetical(self):
+        # "Eucalyptus (trading as Juniper...)" should extract just "Eucalyptus"
+        research = "**Company:** Eucalyptus (trading as Juniper for weight management)"
+        assert _extract_company_name(research) == "Eucalyptus"
+
+    def test_stops_at_em_dash(self):
+        # "Duolingo — Public edtech company" should extract just "Duolingo"
+        research = "**Company:** Duolingo \u2014 Public edtech company (IPO 2021)"
+        assert _extract_company_name(research) == "Duolingo"
+
+    def test_stops_at_em_dash_with_inc(self):
+        # "Reddit Inc. — Public company" should extract "Reddit Inc."
+        research = "**Company:** Reddit Inc. \u2014 Public company (IPO 2024)"
+        assert _extract_company_name(research) == "Reddit Inc."
+
+    def test_no_match_returns_empty(self):
+        research = "This has no company header at all."
+        assert _extract_company_name(research) == ""
+
+    def test_multiword_company(self):
+        research = "**COMPANY: Deutsche Telekom**\n- Size: 200k employees"
+        assert _extract_company_name(research) == "Deutsche Telekom"

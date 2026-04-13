@@ -305,8 +305,8 @@ def validate_cv_against_scaffold(cv_dict: dict, scaffold: "CVScaffold") -> list[
     ref_by_name = {ref.name: ref for ref in scaffold.side_project_refs}
 
     n = len(generated_projects)
-    if n < 2 or n > 4:
-        warnings.append(f"Side projects: {n} selected (expected 2-4).")
+    if n < 2 or n > 3:
+        warnings.append(f"Side projects: {n} selected (expected 2-3). Remove the least relevant.")
 
     for proj in generated_projects:
         gen_name = proj.get("name", "").strip()
